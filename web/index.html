@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tello Control — App Android para DJI Tello EDU</title>
+<meta name="description" content="App Android para pilotar el DJI Tello EDU: vídeo en directo, control por flechas y visión por OpenCV (seguir cara, gestos, identificación)." />
+<style>
+  :root{
+    --bg:#0a0e1a; --bg2:#101627; --card:#151d33; --line:#243049;
+    --fg:#eef2fb; --muted:#9aa7c7; --accent:#1e88e5; --accent2:#00e676;
+    --warn:#ffb300;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(1200px 600px at 50% -10%,#16224a 0%,var(--bg) 55%);
+    color:var(--fg); line-height:1.6; min-height:100vh;
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:48px 20px 80px}
+  header{text-align:center;margin-bottom:40px}
+  .logo{font-size:64px;line-height:1;margin-bottom:12px}
+  h1{font-size:clamp(28px,6vw,44px);font-weight:800;letter-spacing:-.02em}
+  .tag{color:var(--muted);font-size:clamp(15px,3.5vw,19px);margin-top:10px}
+  .cta{
+    display:inline-flex;align-items:center;gap:12px;margin-top:32px;
+    background:linear-gradient(135deg,var(--accent),#0d47a1);
+    color:#fff;font-size:19px;font-weight:700;text-decoration:none;
+    padding:18px 34px;border-radius:14px;
+    box-shadow:0 10px 30px rgba(30,136,229,.4);transition:transform .15s ease,box-shadow .15s ease;
+  }
+  .cta:hover{transform:translateY(-2px);box-shadow:0 14px 38px rgba(30,136,229,.55)}
+  .cta small{font-weight:500;opacity:.8;font-size:13px}
+  .subcta{margin-top:14px;color:var(--muted);font-size:14px}
+  .subcta a{color:var(--accent2);text-decoration:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:48px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
+  .card h3{font-size:16px;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .card p{color:var(--muted);font-size:14px}
+  section{margin-top:48px}
+  h2{font-size:22px;margin-bottom:16px;font-weight:700}
+  ol,ul{margin-left:22px}
+  li{margin:8px 0}
+  code{background:#0d1424;border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:13px;color:#cfe4ff}
+  .warn{background:rgba(255,179,0,.08);border:1px solid rgba(255,179,0,.35);border-radius:14px;padding:18px 20px}
+  .warn h2{color:var(--warn);font-size:18px}
+  footer{text-align:center;color:var(--muted);font-size:13px;margin-top:64px}
+  footer a{color:var(--accent2);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🚁</div>
+    <h1>Tello Control</h1>
+    <p class="tag">Pilota tu <b>DJI Tello EDU</b> desde el móvil: vídeo en directo,
+       control por flechas y visión por OpenCV.</p>
+
+    <a class="cta" id="download" href="https://github.com/__GITHUB_REPO__/releases/latest/download/app-debug.apk">
+      ⬇️ Descargar APK
+      <small>Android 7.0+ · ~100 MB</small>
+    </a>
+    <p class="subcta">Código fuente en
+      <a href="https://github.com/__GITHUB_REPO__" target="_blank" rel="noopener">GitHub</a></p>
+  </header>
+
+  <div class="grid">
+    <div class="card"><h3>🎮 Control manual</h3><p>Despegar, aterrizar y mover con flechas tipo joystick (adelante/atrás, laterales, subir/bajar y giro).</p></div>
+    <div class="card"><h3>📹 Vídeo en directo</h3><p>Stream H.264 de la cámara decodificado en el móvil con MediaCodec, a pantalla completa.</p></div>
+    <div class="card"><h3>🎯 Seguir cara</h3><p>El dron mantiene tu cara centrada automáticamente usando detección facial de OpenCV.</p></div>
+    <div class="card"><h3>✋ Gestos</h3><p>Palma = despegar, puño = aterrizar, 2 dedos = subir, 3 = bajar.</p></div>
+    <div class="card"><h3>🧑 Identificación</h3><p>Memoriza caras con un nombre (LBPH) y las reconoce sobre el vídeo.</p></div>
+    <div class="card"><h3>🐍 OpenCV embebido</h3><p>Python 3.8 + opencv-contrib dentro del propio APK vía Chaquopy. Todo en el móvil, sin PC.</p></div>
+  </div>
+
+  <section>
+    <h2>Cómo se usa</h2>
+    <ol>
+      <li>Enciende el Tello y conéctate a su WiFi <code>TELLO-XXXXXX</code> (no tiene internet, es normal).</li>
+      <li>Abre la app <b>Tello Control</b> y pulsa <b>CONECTAR</b>.</li>
+      <li>Pilota con las flechas · <b>DESPEGAR</b> / <b>ATERRIZAR</b>.</li>
+      <li>Para visión: pulsa <b>VISIÓN</b> y luego <b>SEGUIR</b> o <b>GESTOS</b>.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Instalar el APK</h2>
+    <ul>
+      <li>Descarga el APK en el móvil y ábrelo.</li>
+      <li>Permite <em>"instalar apps de orígenes desconocidos"</em> si te lo pide.</li>
+      <li>Por cable: <code>adb install -r app-debug.apk</code></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="warn">
+      <h2>⚠️ Vuela con cabeza</h2>
+      <p>En los modos <b>SEGUIR</b> y <b>GESTOS</b> el dron se mueve solo. Úsalos en un
+      espacio amplio y ten siempre a mano el botón <b>ATERRIZAR</b>. Los gestos requieren
+      buena luz y fondo despejado. Solo un dispositivo puede controlar el Tello a la vez.</p>
+    </div>
+  </section>
+
+  <footer>
+    Hecho para el DJI Tello EDU · protocolo UDP oficial del SDK.<br/>
+    <a href="https://github.com/__GITHUB_REPO__">Ver en GitHub</a>
+  </footer>
+</div>
+</body>
+</html>

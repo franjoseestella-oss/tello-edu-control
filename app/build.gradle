@@ -1,0 +1,53 @@
+plugins {
+    id 'com.android.application'
+    id 'com.chaquo.python'
+}
+
+android {
+    namespace 'com.fran.tello'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.fran.tello"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        // Chaquopy solo tiene wheels de OpenCV para estas ABIs
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        // Python 3.8: es para el que existen los wheels de opencv-contrib en Chaquopy
+        version "3.8"
+        // Intérprete local que Chaquopy usa para resolver pip durante la compilación
+        buildPython "C:/Users/franj/AppData/Local/Programs/Python/Python311/python.exe"
+        pip {
+            install "numpy==1.19.5"
+            install "opencv-contrib-python==4.5.1.48"
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'com.google.android.material:material:1.12.0'
+}
