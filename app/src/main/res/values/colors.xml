@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_panel">#B30B1220</color>
+    <color name="bg_panel_solid">#F00B1220</color>
+    <color name="stroke_soft">#33FFFFFF</color>
+    <color name="accent">#00E5FF</color>
+    <color name="accent_dim">#1E88E5</color>
+    <color name="ok">#00E676</color>
+    <color name="ok_dim">#1B5E20</color>
+    <color name="danger">#FF5252</color>
+    <color name="danger_dim">#B71C1C</color>
+    <color name="warn">#FFC107</color>
+    <color name="text">#EAF2FF</color>
+    <color name="text_dim">#9FB3C8</color>
+    <color name="glass">#66000000</color>
+</resources>

@@ -23,6 +23,9 @@ public class VisionProcessor implements VideoDecoder.FrameListener {
     public static final int MODE_OFF = 0;
     public static final int MODE_DETECT = 1;
     public static final int MODE_FOLLOW = 2;
+    public static final int MODE_COLOR = 3;
+
+    public static final String[] COLORS = {"verde", "azul", "rojo", "amarillo", "naranja"};
 
     public interface Listener {
         void onDetections(List<OverlayView.Face> faces, String gesture,
@@ -79,6 +82,12 @@ public class VisionProcessor implements VideoDecoder.FrameListener {
     public void setGesture(boolean v) { gestureEnabled = v; if (!v) stopMotion(); }
     public boolean isGesture() { return gestureEnabled; }
     public boolean isReady() { return pythonReady; }
+
+    /** Cambia el color a seguir en modo COLOR. */
+    public void setColor(String name) {
+        if (!pythonReady) return;
+        try { module.callAttr("set_color", name); } catch (Throwable ignore) { }
+    }
 
     public void enrollNext(String name) { pendingEnroll = name; }
 
@@ -161,7 +170,8 @@ public class VisionProcessor implements VideoDecoder.FrameListener {
         final OverlayView.Qr fQr = qr;
         main.post(() -> listener.onDetections(fFaces, fGesture, fQr, w, h));
 
-        if (mode == MODE_FOLLOW && controller != null && controller.isConnected()) {
+        if ((mode == MODE_FOLLOW || mode == MODE_COLOR)
+                && controller != null && controller.isConnected()) {
             controller.setRc(lr, fb, ud, yaw);
         }
         if (gestureEnabled && controller != null && controller.isConnected()) {

@@ -2,5 +2,10 @@
     <style name="Theme.TelloControl" parent="Theme.Material3.Dark.NoActionBar">
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorSecondary">@color/accent_dim</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

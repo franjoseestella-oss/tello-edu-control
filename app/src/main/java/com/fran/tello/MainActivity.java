@@ -1,7 +1,6 @@
 package com.fran.tello;
 
 import android.Manifest;
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -12,6 +11,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -22,6 +22,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -34,14 +35,15 @@ import androidx.core.content.ContextCompat;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Estación de control del DJI Tello EDU: vídeo + HUD + joysticks + gamepad + voz,
- * despegue/aterrizaje/emergencia, flips, foto/vídeo, visión OpenCV, seguridad y
- * caja negra de telemetría.
+ * Estación de control del DJI Tello EDU. Vídeo + HUD + joysticks + gamepad + voz,
+ * despegue/aterrizaje/emergencia, flips, foto/vídeo, visión OpenCV (caras, color,
+ * gestos, QR), misiones, seguridad y caja negra.
  */
 public class MainActivity extends AppCompatActivity
         implements TelloController.Listener, SurfaceHolder.Callback,
@@ -62,9 +64,10 @@ public class MainActivity extends AppCompatActivity
     private OverlayView overlay;
     private boolean surfaceReady = false;
 
-    private TextView txtStatus, txtSpeed;
+    private TextView txtStatus, txtSpeed, txtConnStatus;
     private TextView hudBattery, hudAlt, hudSpeed, hudTime, hudTemp, hudPad;
-    private Button btnConnect, btnDetect, btnFollow, btnGesture, btnRecord, btnVoice, btnLog;
+    private Button btnDetect, btnFollow, btnColor, btnGesture, btnRecord, btnVoice, btnLog;
+    private View connectOverlay;
     private JoystickView joyLeft, joyRight;
     private SeekBar seekSpeed;
 
@@ -73,11 +76,15 @@ public class MainActivity extends AppCompatActivity
 
     private int speed = 50;
     private float jLr = 0, jFb = 0, jUd = 0, jYaw = 0;
+    private int colorIndex = 0;
+
+    // Misión (secuencia de pasos): int[]{kind, value}. kind 0..5 = up/down/left/right/forward/back, 6 = giro
+    private final List<int[]> mission = new ArrayList<>();
 
     // Seguridad
     private boolean autoLand = true;
     private int autoLandPct = 10;
-    private int lowWarnPct = 20;
+    private final int lowWarnPct = 20;
     private boolean lowWarned = false;
     private boolean autoLanded = false;
 
@@ -90,9 +97,11 @@ public class MainActivity extends AppCompatActivity
         surfaceVideo = findViewById(R.id.surfaceVideo);
         surfaceVideo.getHolder().addCallback(this);
         overlay = findViewById(R.id.overlay);
+        connectOverlay = findViewById(R.id.connectOverlay);
 
         txtStatus = findViewById(R.id.txtStatus);
         txtSpeed = findViewById(R.id.txtSpeed);
+        txtConnStatus = findViewById(R.id.txtConnStatus);
         hudBattery = findViewById(R.id.hudBattery);
         hudAlt = findViewById(R.id.hudAlt);
         hudSpeed = findViewById(R.id.hudSpeed);
@@ -100,9 +109,9 @@ public class MainActivity extends AppCompatActivity
         hudTemp = findViewById(R.id.hudTemp);
         hudPad = findViewById(R.id.hudPad);
 
-        btnConnect = findViewById(R.id.btnConnect);
         btnDetect = findViewById(R.id.btnDetect);
         btnFollow = findViewById(R.id.btnFollow);
+        btnColor = findViewById(R.id.btnColor);
         btnGesture = findViewById(R.id.btnGesture);
         btnRecord = findViewById(R.id.btnRecord);
         btnVoice = findViewById(R.id.btnVoice);
@@ -111,7 +120,6 @@ public class MainActivity extends AppCompatActivity
         joyRight = findViewById(R.id.joyRight);
         seekSpeed = findViewById(R.id.seekSpeed);
 
-        // Ajustes persistentes
         speed = prefs.getInt("speed", 50);
         autoLand = prefs.getBoolean("autoLand", true);
         autoLandPct = prefs.getInt("autoLandPct", 10);
@@ -131,7 +139,7 @@ public class MainActivity extends AppCompatActivity
             @Override public void onStopTrackingTouch(SeekBar sb) { prefs.edit().putInt("speed", speed).apply(); }
         });
 
-        btnConnect.setOnClickListener(v -> { haptic(v); connectDrone(); });
+        findViewById(R.id.btnConnectBig).setOnClickListener(v -> { haptic(v); connectDrone(); });
         findViewById(R.id.btnTakeoff).setOnClickListener(v -> { haptic(v); if (ensureConnected()) controller.takeoff(); });
         findViewById(R.id.btnLand).setOnClickListener(v -> { haptic(v); if (ensureConnected()) controller.land(); });
         findViewById(R.id.btnEmergency).setOnClickListener(v -> { haptic(v); if (ensureConnected()) confirmEmergency(); });
@@ -144,17 +152,19 @@ public class MainActivity extends AppCompatActivity
         btnVoice.setOnClickListener(v -> { haptic(v); toggleVoice(); });
         btnLog.setOnClickListener(v -> { haptic(v); toggleLog(); });
         findViewById(R.id.btnSettings).setOnClickListener(v -> { haptic(v); showSettings(); });
+        findViewById(R.id.btnMission).setOnClickListener(v -> { haptic(v); showMission(); });
 
         setupModeButtons();
 
         gamepad = new GamepadController(this);
         voice = new VoiceController(this, this);
 
-        txtStatus.setText("Cargando OpenCV...");
+        setConnStatus("Cargando OpenCV...");
         new Thread(() -> {
             vision = new VisionProcessor(this, this);
-            runOnUiThread(() -> txtStatus.setText(
-                    vision.isReady() ? "Desconectado · OpenCV listo" : "Desconectado"));
+            runOnUiThread(() -> setConnStatus(vision.isReady()
+                    ? "1. Conéctate al WiFi del dron (TELLO-XXXXXX)\n2. Pulsa Conectar"
+                    : "1. Conéctate al WiFi del dron (TELLO-XXXXXX)\n2. Pulsa Conectar"));
         }, "python-init").start();
 
         startWatchdog();
@@ -162,7 +172,8 @@ public class MainActivity extends AppCompatActivity
 
     private void pushRc() {
         if (controller == null || !controller.isConnected()) return;
-        if (vision != null && vision.getMode() == VisionProcessor.MODE_FOLLOW) return;
+        int m = vision != null ? vision.getMode() : 0;
+        if (m == VisionProcessor.MODE_FOLLOW || m == VisionProcessor.MODE_COLOR) return; // la visión manda
         float k = speed / 100f;
         controller.setRc(Math.round(jLr * 100 * k), Math.round(jFb * 100 * k),
                          Math.round(jUd * 100 * k), Math.round(jYaw * 100 * k));
@@ -185,10 +196,8 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override public void onRc(float lr, float fb, float ud, float yaw) {
-        jLr = lr; jFb = fb; jUd = ud; jYaw = yaw;
-        pushRc();
+        jLr = lr; jFb = fb; jUd = ud; jYaw = yaw; pushRc();
     }
-
     @Override public void onAction(String action) { runOnUiThread(() -> handleAction(action)); }
 
     // ---------- Voz ----------
@@ -216,7 +225,7 @@ public class MainActivity extends AppCompatActivity
     @Override public void onCommand(String action) { runOnUiThread(() -> handleAction(action)); }
     @Override public void onVoiceStatus(String heard) { runOnUiThread(() -> txtStatus.setText(heard)); }
 
-    // ---------- Acciones unificadas (gamepad / voz) ----------
+    // ---------- Acciones unificadas ----------
 
     private void handleAction(String action) {
         if (action == null) return;
@@ -233,7 +242,6 @@ public class MainActivity extends AppCompatActivity
             case "stop":    if (controller != null) controller.resetJoystick(); return;
         }
         if (!ensureConnected()) return;
-        // Movimientos por pulso (~1.2 s)
         switch (action) {
             case "up":      pulseUd(speed); break;
             case "down":    pulseUd(-speed); break;
@@ -271,7 +279,7 @@ public class MainActivity extends AppCompatActivity
     private void showSettings() {
         LinearLayout ll = new LinearLayout(this);
         ll.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        int pad = dp(16);
         ll.setPadding(pad, pad, pad, pad);
 
         final CheckBox cb = new CheckBox(this);
@@ -296,7 +304,8 @@ public class MainActivity extends AppCompatActivity
 
         final TextView info = new TextView(this);
         info.setText("\nMando: A=despegar B=aterrizar X=foto Y=grabar L1/R1=flip START=emergencia\n"
-                + "Voz: «despega», «aterriza», «sube», «gira derecha», «foto», «para»…");
+                + "Voz: «despega», «aterriza», «sube», «gira derecha», «foto», «para»…\n"
+                + "Color: pulsación larga en 🟢 para cambiar de color.");
         info.setTextSize(12);
         ll.addView(info);
 
@@ -311,6 +320,107 @@ public class MainActivity extends AppCompatActivity
                 .setNegativeButton("Cerrar", null)
                 .show();
     }
+
+    // ---------- Misiones ----------
+
+    private void showMission() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(12);
+        root.setPadding(pad, pad, pad, pad);
+
+        final TextView list = new TextView(this);
+        list.setText(missionText());
+        list.setTextSize(13);
+
+        final String[][] adders = {
+            {"⬆ Subir 50", "0"}, {"⬇ Bajar 50", "1"},
+            {"⬅ Izq 50", "2"}, {"➡ Der 50", "3"},
+            {"↑ Adelante 50", "4"}, {"↓ Atrás 50", "5"},
+            {"⟲ Girar 90", "-90"}, {"⟳ Girar 90", "90"},
+        };
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        for (int i = 0; i < adders.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (int j = i; j < i + 2 && j < adders.length; j++) {
+                Button b = new Button(this);
+                b.setText(adders[j][0]);
+                b.setTextSize(12);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                b.setLayoutParams(lp);
+                final int code = Integer.parseInt(adders[j][1]);
+                final boolean rotate = adders[j][0].contains("Girar");
+                b.setOnClickListener(v -> {
+                    if (rotate) mission.add(new int[]{6, code});
+                    else mission.add(new int[]{code, 50});
+                    list.setText(missionText());
+                });
+                row.addView(b);
+            }
+            grid.addView(row);
+        }
+
+        Button clear = new Button(this);
+        clear.setText("🗑 Vaciar");
+        clear.setOnClickListener(v -> { mission.clear(); list.setText(missionText()); });
+        grid.addView(clear);
+
+        LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.VERTICAL);
+        inner.addView(list);
+        inner.addView(grid);
+        ScrollView sv = new ScrollView(this);
+        sv.addView(inner);
+        root.addView(sv);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Misión (waypoints)")
+                .setView(root)
+                .setPositiveButton("▶ Ejecutar", (d, w) -> runMission())
+                .setNegativeButton("Cerrar", null)
+                .show();
+    }
+
+    private String missionText() {
+        if (mission.isEmpty()) return "Sin pasos. Añade movimientos abajo.\n";
+        String[] names = {"Subir", "Bajar", "Izquierda", "Derecha", "Adelante", "Atrás"};
+        StringBuilder sb = new StringBuilder();
+        int i = 1;
+        for (int[] s : mission) {
+            if (s[0] == 6) sb.append(i++).append(". Girar ").append(s[1]).append("°\n");
+            else sb.append(i++).append(". ").append(names[s[0]]).append(" ").append(s[1]).append(" cm\n");
+        }
+        return sb.toString();
+    }
+
+    private void runMission() {
+        if (!ensureConnected() || mission.isEmpty()) return;
+        final List<int[]> steps = new ArrayList<>(mission);
+        final String[] dirs = {"up", "down", "left", "right", "forward", "back"};
+        Toast.makeText(this, "▶ Ejecutando misión (" + steps.size() + " pasos). Despega primero.", Toast.LENGTH_LONG).show();
+        new Thread(() -> {
+            controller.setRcSuspended(true);
+            try {
+                for (int[] s : steps) {
+                    if (s[0] == 6) {
+                        controller.rotateCmd(s[1]);
+                        sleep(Math.abs(s[1]) * 22L + 1500);
+                    } else {
+                        controller.moveCmd(dirs[s[0]], s[1]);
+                        sleep((long) s[1] * 1000 / Math.max(10, speed) + 1500);
+                    }
+                }
+            } finally {
+                controller.setRcSuspended(false);
+            }
+            runOnUiThread(() -> Toast.makeText(this, "✅ Misión completada", Toast.LENGTH_SHORT).show());
+        }, "mission").start();
+    }
+
+    private static void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignore) { } }
 
     // ---------- Visión ----------
 
@@ -331,6 +441,28 @@ public class MainActivity extends AppCompatActivity
             if (m == VisionProcessor.MODE_FOLLOW)
                 Toast.makeText(this, "El dron seguirá tu cara. ¡Ojo!", Toast.LENGTH_SHORT).show();
             refreshModeButtons();
+        });
+        btnColor.setOnClickListener(v -> {
+            if (!visionReady()) return;
+            haptic(v);
+            int m = vision.getMode() == VisionProcessor.MODE_COLOR
+                    ? VisionProcessor.MODE_OFF : VisionProcessor.MODE_COLOR;
+            vision.setMode(m);
+            if (m == VisionProcessor.MODE_COLOR) {
+                vision.setColor(VisionProcessor.COLORS[colorIndex]);
+                Toast.makeText(this, "Siguiendo color: " + VisionProcessor.COLORS[colorIndex]
+                        + " (mantén pulsado para cambiar)", Toast.LENGTH_LONG).show();
+            }
+            refreshModeButtons();
+        });
+        btnColor.setOnLongClickListener(v -> {
+            if (!visionReady()) return false;
+            colorIndex = (colorIndex + 1) % VisionProcessor.COLORS.length;
+            vision.setColor(VisionProcessor.COLORS[colorIndex]);
+            btnColor.setText("🟢 " + VisionProcessor.COLORS[colorIndex]);
+            if (vision.getMode() != VisionProcessor.MODE_COLOR) vision.setMode(VisionProcessor.MODE_COLOR);
+            refreshModeButtons();
+            return true;
         });
         btnGesture.setOnClickListener(v -> {
             if (!visionReady()) return;
@@ -361,6 +493,7 @@ public class MainActivity extends AppCompatActivity
         int m = vision.getMode();
         btnDetect.setSelected(m == VisionProcessor.MODE_DETECT);
         btnFollow.setSelected(m == VisionProcessor.MODE_FOLLOW);
+        btnColor.setSelected(m == VisionProcessor.MODE_COLOR);
         btnGesture.setSelected(vision.isGesture());
         if (m == VisionProcessor.MODE_OFF && !vision.isGesture()) overlay.clear();
     }
@@ -441,8 +574,7 @@ public class MainActivity extends AppCompatActivity
     private void connectDrone() {
         Network wifi = getWifiNetwork();
         if (wifi == null) {
-            Toast.makeText(this, "Conéctate al WiFi del Tello (TELLO-XXXXXX)", Toast.LENGTH_LONG).show();
-            txtStatus.setText("Sin WiFi del Tello");
+            setConnStatus("⚠️ No detecto WiFi del Tello.\nConéctate a la red TELLO-XXXXXX y reintenta.");
             return;
         }
         if (controller != null) controller.disconnect();
@@ -455,7 +587,7 @@ public class MainActivity extends AppCompatActivity
             vision.setController(controller);
             videoDecoder.setFrameListener(vision);
         }
-        txtStatus.setText("Conectando...");
+        setConnStatus("Conectando...");
         new Thread(() -> {
             controller.connect();
             controller.setSpeed(speed);
@@ -490,9 +622,17 @@ public class MainActivity extends AppCompatActivity
                 .show();
     }
 
+    private void setConnStatus(String msg) {
+        if (txtConnStatus != null) txtConnStatus.setText(msg);
+        txtStatus.setText(msg.split("\n")[0]);
+    }
+
     // ---------- Callbacks del controlador ----------
 
-    @Override public void onStatus(String msg) { txtStatus.setText(msg); }
+    @Override public void onStatus(String msg) {
+        txtStatus.setText(msg);
+        if (connectOverlay.getVisibility() == View.VISIBLE) txtConnStatus.setText(msg);
+    }
 
     @Override public void onTelemetry(TelloController.Telemetry t) {
         hudBattery.setText((t.battery <= 15 ? "🪫 " : "🔋 ") + t.battery + "%");
@@ -500,8 +640,7 @@ public class MainActivity extends AppCompatActivity
         hudSpeed.setText(String.format(Locale.US, "🚀 %.0f", t.speedKmh()));
         hudTime.setText("⏱ " + t.flightTime + "s");
         hudTemp.setText("🌡 " + ((t.templ + t.temph) / 2) + "°");
-        hudPad.setText(t.missionPad >= 0 ? "🎯 pad " + t.missionPad : "🎯 --");
-
+        hudPad.setText(t.missionPad >= 0 ? "🎯" + t.missionPad : "🎯 --");
         if (logger.isLogging()) logger.log(t);
         checkSafety(t);
     }
@@ -522,8 +661,12 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override public void onConnected(boolean ok) {
-        if (ok) { btnConnect.setText("CONECTADO"); if (surfaceReady && videoDecoder != null) videoDecoder.start(); }
-        else btnConnect.setText("CONECTAR");
+        if (ok) {
+            connectOverlay.setVisibility(View.GONE);
+        } else {
+            connectOverlay.setVisibility(View.VISIBLE);
+            setConnStatus("No se pudo conectar. Revisa el WiFi del Tello y reintenta.");
+        }
     }
 
     @Override public void onResponse(String command, String response) {
@@ -545,10 +688,9 @@ public class MainActivity extends AppCompatActivity
         ui.postDelayed(new Runnable() {
             @Override public void run() {
                 if (controller != null && controller.isConnected()) {
-                    long age = System.currentTimeMillis() - controller.getTelemetry().lastUpdateMs;
-                    if (controller.getTelemetry().lastUpdateMs > 0 && age > 4000) {
+                    long last = controller.getTelemetry().lastUpdateMs;
+                    if (last > 0 && System.currentTimeMillis() - last > 4000)
                         txtStatus.setText("⚠️ Señal débil con el dron...");
-                    }
                 }
                 ui.postDelayed(this, 2000);
             }
@@ -570,6 +712,7 @@ public class MainActivity extends AppCompatActivity
     // ---------- Utilidades ----------
 
     private void haptic(View v) { v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); }
+    private int dp(int v) { return (int) (v * getResources().getDisplayMetrics().density); }
 
     private String timestamp() {
         return new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());

@@ -65,6 +65,7 @@ public class TelloController {
 
     private volatile boolean running = false;
     private volatile boolean connected = false;
+    private volatile boolean rcSuspended = false;
     private volatile String lastCommandSent = "";
 
     // Joystick (-100..100)
@@ -124,7 +125,7 @@ public class TelloController {
             long lastKeepalive = 0;
             while (running && connected) {
                 long now = System.currentTimeMillis();
-                if (rcDirty || now - lastKeepalive > 1000) {
+                if (!rcSuspended && (rcDirty || now - lastKeepalive > 1000)) {
                     sendRaw("rc " + lr + " " + fb + " " + ud + " " + yaw);
                     rcDirty = false;
                     lastKeepalive = now;
@@ -238,6 +239,20 @@ public class TelloController {
     public void setSpeed(int cms) {
         sendRaw("speed " + clampPos(cms, 10, 100));
     }
+
+    /** Movimiento absoluto para misiones: dir = up/down/left/right/forward/back (20..500 cm). */
+    public void moveCmd(String dir, int cm) {
+        sendRaw(dir + " " + clampPos(cm, 20, 500));
+    }
+
+    /** Rotación para misiones: grados +derecha / -izquierda. */
+    public void rotateCmd(int deg) {
+        if (deg >= 0) sendRaw("cw " + clampPos(deg, 1, 360));
+        else sendRaw("ccw " + clampPos(-deg, 1, 360));
+    }
+
+    /** Suspende el envío de rc (para ejecutar comandos absolutos de misión). */
+    public void setRcSuspended(boolean s) { rcSuspended = s; }
 
     // Ejes del joystick (-100..100)
     public void setForwardBack(int v) { int c = clamp(v); if (c != fb) { fb = c; rcDirty = true; } }

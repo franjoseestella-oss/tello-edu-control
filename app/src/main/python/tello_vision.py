@@ -10,7 +10,7 @@ Funciones expuestas a Java:
   known_names()                        -> str
   reset_ids()                          -> str
 
-mode:  0=off  1=detectar caras  2=seguir cara (PID)
+mode:  0=off  1=detectar caras  2=seguir cara (PID)  3=seguir por color (PID)
 
 Formato de salida:
   "F:x,y,w,h,label;...|G:gesto|Q:x1,y1,x2,y2,x3,y3,x4,y4,texto|C:lr,fb,ud,yaw"
@@ -31,6 +31,23 @@ except Exception:
     _has_face_module = False
 
 _qr = cv2.QRCodeDetector()
+
+# Rangos HSV para seguimiento por color (H: 0-179 en OpenCV)
+_COLORS = {
+    "verde":    [((40, 70, 70), (80, 255, 255))],
+    "azul":     [((100, 130, 60), (130, 255, 255))],
+    "rojo":     [((0, 120, 70), (10, 255, 255)), ((170, 120, 70), (179, 255, 255))],
+    "amarillo": [((20, 100, 100), (35, 255, 255))],
+    "naranja":  [((10, 120, 120), (20, 255, 255))],
+}
+_color_name = "verde"
+
+
+def set_color(name):
+    global _color_name
+    if name in _COLORS:
+        _color_name = name
+    return _color_name
 
 _samples = []
 _sample_ids = []
@@ -72,6 +89,14 @@ def process(data, w, h, mode, gesture):
                 parts.append("F:%d,%d,%d,%d,%s" % (x, y, ww, hh, main_name if is_main else ""))
             if mode == 2:
                 ctrl = _follow_pid(fx, fy, fw, fh, w, h)
+        else:
+            _pid_reset()
+    elif mode == 3:
+        box = _detect_color(img)
+        if box is not None:
+            bx, by, bw, bh = box
+            parts.append("F:%d,%d,%d,%d,%s" % (bx, by, bw, bh, _color_name))
+            ctrl = _follow_pid(bx, by, bw, bh, w, h)
         else:
             _pid_reset()
     else:
@@ -221,6 +246,31 @@ def reset_ids():
     if _has_face_module:
         _recognizer = cv2.face.LBPHFaceRecognizer_create()
     return "ok"
+
+
+# =====================================================================
+#  SEGUIMIENTO POR COLOR
+# =====================================================================
+def _detect_color(img):
+    try:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = None
+        for lo, hi in _COLORS.get(_color_name, []):
+            m = cv2.inRange(hsv, np.array(lo, np.uint8), np.array(hi, np.uint8))
+            mask = m if mask is None else cv2.bitwise_or(mask, m)
+        if mask is None:
+            return None
+        mask = cv2.erode(mask, None, iterations=2)
+        mask = cv2.dilate(mask, None, iterations=2)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+        cnt = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(cnt) < (img.shape[0] * img.shape[1]) * 0.01:
+            return None
+        return cv2.boundingRect(cnt)   # (x, y, w, h)
+    except Exception:
+        return None
 
 
 # =====================================================================
