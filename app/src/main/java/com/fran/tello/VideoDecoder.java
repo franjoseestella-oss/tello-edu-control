@@ -50,6 +50,10 @@ public class VideoDecoder {
 
     private int[] argb;      // buffer de píxeles reutilizable
     private Bitmap bitmap;
+    private final Object frameLock = new Object();
+    private int lastW = 0, lastH = 0;
+
+    private VideoRecorder recorder;
 
     public VideoDecoder(SurfaceView surfaceView, Network network) {
         this.surfaceView = surfaceView;
@@ -57,6 +61,19 @@ public class VideoDecoder {
     }
 
     public void setFrameListener(FrameListener l) { this.frameListener = l; }
+
+    public void setRecorder(VideoRecorder r) { this.recorder = r; }
+
+    public int getFrameWidth()  { return lastW > 0 ? lastW : 960; }
+    public int getFrameHeight() { return lastH > 0 ? lastH : 720; }
+
+    /** Copia del último fotograma para hacer una foto. */
+    public Bitmap getSnapshot() {
+        synchronized (frameLock) {
+            if (bitmap == null || lastW == 0) return null;
+            return Bitmap.createBitmap(bitmap);
+        }
+    }
 
     public void start() {
         if (running) return;
@@ -149,12 +166,20 @@ public class VideoDecoder {
     private void renderAndDispatch(Image image) {
         int w = image.getWidth();
         int h = image.getHeight();
-        if (argb == null || argb.length != w * h) {
-            argb = new int[w * h];
-            bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        synchronized (frameLock) {
+            if (argb == null || argb.length != w * h) {
+                argb = new int[w * h];
+                bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            }
+            yuvToArgb(image, argb, w, h);
+            bitmap.setPixels(argb, 0, w, 0, 0, w, h);
+            lastW = w; lastH = h;
         }
-        yuvToArgb(image, argb, w, h);
-        bitmap.setPixels(argb, 0, w, 0, 0, w, h);
+
+        // Grabación de vídeo (si está activa)
+        if (recorder != null && recorder.isRecording()) {
+            recorder.encodeFrame(argb, w, h);
+        }
 
         // Pintar en la SurfaceView (escalado a pantalla)
         SurfaceHolder holder = surfaceView.getHolder();

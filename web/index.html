@@ -65,11 +65,14 @@
   </header>
 
   <div class="grid">
-    <div class="card"><h3>🎮 Control manual</h3><p>Despegar, aterrizar y mover con flechas tipo joystick (adelante/atrás, laterales, subir/bajar y giro).</p></div>
-    <div class="card"><h3>📹 Vídeo en directo</h3><p>Stream H.264 de la cámara decodificado en el móvil con MediaCodec, a pantalla completa.</p></div>
-    <div class="card"><h3>🎯 Seguir cara</h3><p>El dron mantiene tu cara centrada automáticamente usando detección facial de OpenCV.</p></div>
-    <div class="card"><h3>✋ Gestos</h3><p>Palma = despegar, puño = aterrizar, 2 dedos = subir, 3 = bajar.</p></div>
-    <div class="card"><h3>🧑 Identificación</h3><p>Memoriza caras con un nombre (LBPH) y las reconoce sobre el vídeo.</p></div>
+    <div class="card"><h3>🕹️ Joysticks analógicos</h3><p>Dos sticks en pantalla como un mando real: giro y altura a la izquierda, movimiento a la derecha. Con retorno al centro.</p></div>
+    <div class="card"><h3>📊 HUD de telemetría</h3><p>Batería, altura, velocidad, tiempo de vuelo, temperatura y mission pad en tiempo real.</p></div>
+    <div class="card"><h3>📹 Vídeo + foto + grabación</h3><p>Stream H.264 a pantalla completa (MediaCodec). Captura fotos y graba vídeo MP4 a la galería.</p></div>
+    <div class="card"><h3>🤸 Flips y emergencia</h3><p>Volteretas en 4 direcciones, ajuste de velocidad y parada de emergencia de motores.</p></div>
+    <div class="card"><h3>🎯 Seguir cara (PID)</h3><p>El dron mantiene tu cara centrada con control PID suave: gira, ajusta altura y distancia.</p></div>
+    <div class="card"><h3>✋ Gestos = comandos</h3><p>Palma = despegar, puño = aterrizar, 2 dedos = subir, 3 = bajar.</p></div>
+    <div class="card"><h3>🧑 Caras memorizadas</h3><p>Identificación facial LBPH que se guarda entre sesiones. Reconoce a quién sigue.</p></div>
+    <div class="card"><h3>🔳 Lector de QR</h3><p>Detecta códigos QR en el vídeo (uso educativo del Tello EDU) y los muestra sobre la imagen.</p></div>
     <div class="card"><h3>🐍 OpenCV embebido</h3><p>Python 3.8 + opencv-contrib dentro del propio APK vía Chaquopy. Todo en el móvil, sin PC.</p></div>
   </div>
 

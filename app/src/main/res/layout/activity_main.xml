@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- ===== Vídeo de la cámara (fondo) ===== -->
+    <!-- ===== Vídeo ===== -->
     <SurfaceView
         android:id="@+id/surfaceVideo"
         android:layout_width="0dp"
@@ -16,7 +16,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- ===== Capa de detecciones (recuadros de caras/gestos) ===== -->
+    <!-- ===== Capa de detecciones ===== -->
     <com.fran.tello.OverlayView
         android:id="@+id/overlay"
         android:layout_width="0dp"
@@ -26,29 +26,12 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- ===== Botones de modo de visión ===== -->
-    <LinearLayout
-        android:id="@+id/modeBar"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="12dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <Button android:id="@+id/btnVision" style="@style/ModeButton" android:text="👁 VISIÓN" />
-        <Button android:id="@+id/btnFollow" style="@style/ModeButton" android:text="🎯 SEGUIR" />
-        <Button android:id="@+id/btnGesture" style="@style/ModeButton" android:text="✋ GESTOS" />
-        <Button android:id="@+id/btnEnroll"  style="@style/ModeButton" android:text="➕ CARA" />
-    </LinearLayout>
-
-    <!-- ===== Barra superior ===== -->
+    <!-- ===== Barra superior izquierda: conectar + estado ===== -->
     <Button
         android:id="@+id/btnConnect"
         android:layout_width="wrap_content"
-        android:layout_height="48dp"
-        android:layout_margin="12dp"
+        android:layout_height="46dp"
+        android:layout_margin="10dp"
         android:paddingHorizontal="16dp"
         android:text="CONECTAR"
         android:textColor="#FFFFFF"
@@ -60,148 +43,184 @@
 
     <TextView
         android:id="@+id/txtStatus"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:text="Desconectado"
         android:textColor="#FFFFFF"
-        android:textStyle="bold"
-        android:textSize="14sp"
+        android:textSize="12sp"
+        android:maxLines="2"
+        android:ellipsize="end"
         android:shadowColor="#000000"
         android:shadowRadius="6"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="8dp"
         app:layout_constraintTop_toTopOf="@id/btnConnect"
         app:layout_constraintBottom_toBottomOf="@id/btnConnect"
         app:layout_constraintStart_toEndOf="@id/btnConnect"
-        android:layout_marginStart="12dp" />
+        app:layout_constraintEnd_toStartOf="@id/hud" />
 
-    <TextView
-        android:id="@+id/txtBattery"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="12dp"
-        android:text="🔋 --%"
-        android:textColor="#FFFFFF"
-        android:textStyle="bold"
-        android:textSize="16sp"
-        android:shadowColor="#000000"
-        android:shadowRadius="6"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <Button
-        android:id="@+id/btnTakeoff"
-        android:layout_width="wrap_content"
-        android:layout_height="52dp"
-        android:paddingHorizontal="20dp"
-        android:text="🛫 DESPEGAR"
-        android:textColor="#FFFFFF"
-        android:textStyle="bold"
-        android:background="@drawable/btn_takeoff"
-        android:stateListAnimator="@null"
-        app:layout_constraintTop_toBottomOf="@id/txtBattery"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="12dp"
-        android:layout_marginTop="8dp" />
-
-    <Button
-        android:id="@+id/btnLand"
-        android:layout_width="wrap_content"
-        android:layout_height="52dp"
-        android:paddingHorizontal="20dp"
-        android:text="🛬 ATERRIZAR"
-        android:textColor="#FFFFFF"
-        android:textStyle="bold"
-        android:background="@drawable/btn_land"
-        android:stateListAnimator="@null"
-        app:layout_constraintTop_toBottomOf="@id/btnTakeoff"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="12dp"
-        android:layout_marginTop="8dp" />
-
-    <!-- ===== Mando IZQUIERDO: adelante/atrás/izquierda/derecha ===== -->
+    <!-- ===== HUD de telemetría (centro-arriba) ===== -->
     <LinearLayout
+        android:id="@+id/hud"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:layout_margin="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        android:orientation="horizontal"
+        android:background="@drawable/hud_bg"
+        android:padding="7dp"
+        android:layout_marginTop="10dp"
+        android:divider="?android:dividerHorizontal"
+        android:showDividers="middle"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/iconBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintHorizontal_bias="1.0">
 
-        <Button
-            android:id="@+id/btnForward"
-            style="@style/DirButton"
-            android:text="▲" />
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <Button android:id="@+id/btnLeft" style="@style/DirButton" android:text="◀" />
-            <Space android:layout_width="72dp" android:layout_height="1dp" />
-            <Button android:id="@+id/btnRight" style="@style/DirButton" android:text="▶" />
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/btnBack"
-            style="@style/DirButton"
-            android:text="▼" />
+        <TextView android:id="@+id/hudBattery" style="@style/HudChip" android:text="🔋 --%" />
+        <TextView android:id="@+id/hudAlt" style="@style/HudChip" android:text="⛰ --cm" />
+        <TextView android:id="@+id/hudSpeed" style="@style/HudChip" android:text="🚀 --" />
+        <TextView android:id="@+id/hudTime" style="@style/HudChip" android:text="⏱ --s" />
+        <TextView android:id="@+id/hudTemp" style="@style/HudChip" android:text="🌡 --°" />
+        <TextView android:id="@+id/hudPad" style="@style/HudChip" android:text="🎯 --" />
     </LinearLayout>
 
-    <!-- ===== Mando DERECHO: subir/bajar + girar ===== -->
+    <!-- ===== Barra superior derecha: foto / grabar ===== -->
     <LinearLayout
+        android:id="@+id/iconBar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:layout_margin="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        android:orientation="horizontal"
+        android:layout_margin="8dp"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <Button
-            android:id="@+id/btnUp"
-            style="@style/DirButton"
-            android:text="⬆" />
+        <Button android:id="@+id/btnPhoto" style="@style/IconButton" android:text="📷" />
+        <Button android:id="@+id/btnRecord" style="@style/IconButton" android:text="⏺" />
+    </LinearLayout>
 
+    <!-- ===== Botones de visión (segunda fila, centro) ===== -->
+    <LinearLayout
+        android:id="@+id/modeBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp"
+        app:layout_constraintTop_toBottomOf="@id/iconBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <Button android:id="@+id/btnDetect" style="@style/ModeButton" android:text="👁 CARAS" />
+        <Button android:id="@+id/btnFollow" style="@style/ModeButton" android:text="🎯 SEGUIR" />
+        <Button android:id="@+id/btnGesture" style="@style/ModeButton" android:text="✋ GESTOS" />
+        <Button android:id="@+id/btnEnroll"  style="@style/ModeButton" android:text="➕ CARA" />
+    </LinearLayout>
+
+    <!-- ===== Joystick izquierdo: giro (X) + altura (Y) ===== -->
+    <com.fran.tello.JoystickView
+        android:id="@+id/joyLeft"
+        android:layout_width="170dp"
+        android:layout_height="170dp"
+        android:layout_margin="14dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <TextView
+        style="@style/HudChip"
+        android:text="giro / altura"
+        android:textSize="11sp"
+        android:alpha="0.7"
+        app:layout_constraintStart_toStartOf="@id/joyLeft"
+        app:layout_constraintEnd_toEndOf="@id/joyLeft"
+        app:layout_constraintBottom_toTopOf="@id/joyLeft" />
+
+    <!-- ===== Joystick derecho: lateral (X) + adelante/atrás (Y) ===== -->
+    <com.fran.tello.JoystickView
+        android:id="@+id/joyRight"
+        android:layout_width="170dp"
+        android:layout_height="170dp"
+        android:layout_margin="14dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        style="@style/HudChip"
+        android:text="mover"
+        android:textSize="11sp"
+        android:alpha="0.7"
+        app:layout_constraintStart_toStartOf="@id/joyRight"
+        app:layout_constraintEnd_toEndOf="@id/joyRight"
+        app:layout_constraintBottom_toTopOf="@id/joyRight" />
+
+    <!-- ===== Columna central inferior: despegue/aterrizaje/emergencia + velocidad + flips ===== -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_marginBottom="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Flips -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
-            <Button android:id="@+id/btnYawLeft" style="@style/DirButton" android:text="↺" />
-            <Space android:layout_width="72dp" android:layout_height="1dp" />
-            <Button android:id="@+id/btnYawRight" style="@style/DirButton" android:text="↻" />
+            <Button android:id="@+id/btnFlipL" style="@style/FlipButton" android:text="⟲ Flip" />
+            <Button android:id="@+id/btnFlipF" style="@style/FlipButton" android:text="↑ Flip" />
+            <Button android:id="@+id/btnFlipB" style="@style/FlipButton" android:text="↓ Flip" />
+            <Button android:id="@+id/btnFlipR" style="@style/FlipButton" android:text="⟳ Flip" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btnDown"
-            style="@style/DirButton"
-            android:text="⬇" />
-    </LinearLayout>
-
-    <!-- ===== Velocidad ===== -->
-    <LinearLayout
-        android:layout_width="200dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="8dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginBottom="8dp">
-
-        <TextView
-            android:id="@+id/txtSpeed"
+        <!-- Despegar / Aterrizar / Emergencia -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Velocidad: 50%"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold"
-            android:shadowColor="#000000"
-            android:shadowRadius="6" />
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+            <Button
+                android:id="@+id/btnTakeoff"
+                android:layout_width="wrap_content"
+                android:layout_height="50dp"
+                android:layout_marginHorizontal="4dp"
+                android:paddingHorizontal="18dp"
+                android:text="🛫 DESPEGAR"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:background="@drawable/btn_takeoff"
+                android:stateListAnimator="@null" />
+            <Button
+                android:id="@+id/btnLand"
+                android:layout_width="wrap_content"
+                android:layout_height="50dp"
+                android:layout_marginHorizontal="4dp"
+                android:paddingHorizontal="18dp"
+                android:text="🛬 ATERRIZAR"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:background="@drawable/btn_land"
+                android:stateListAnimator="@null" />
+            <Button
+                android:id="@+id/btnEmergency"
+                android:layout_width="wrap_content"
+                android:layout_height="50dp"
+                android:layout_marginHorizontal="4dp"
+                android:paddingHorizontal="14dp"
+                android:text="🚨"
+                android:textSize="20sp"
+                android:background="@drawable/btn_emergency"
+                android:stateListAnimator="@null" />
+        </LinearLayout>
 
+        <!-- Velocidad -->
+        <TextView
+            android:id="@+id/txtSpeed"
+            style="@style/HudChip"
+            android:text="Velocidad: 50%"
+            android:layout_marginTop="6dp" />
         <SeekBar
             android:id="@+id/seekSpeed"
-            android:layout_width="match_parent"
+            android:layout_width="220dp"
             android:layout_height="wrap_content"
             android:max="100"
             android:progress="50" />
