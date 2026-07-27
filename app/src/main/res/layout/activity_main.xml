@@ -95,6 +95,9 @@
 
         <Button android:id="@+id/btnPhoto" style="@style/IconButton" android:text="📷" />
         <Button android:id="@+id/btnRecord" style="@style/IconButton" android:text="⏺" />
+        <Button android:id="@+id/btnVoice" style="@style/IconButton" android:text="🎤" />
+        <Button android:id="@+id/btnLog" style="@style/IconButton" android:text="📈" />
+        <Button android:id="@+id/btnSettings" style="@style/IconButton" android:text="⚙" />
     </LinearLayout>
 
     <!-- ===== Botones de visión (segunda fila, centro) ===== -->
