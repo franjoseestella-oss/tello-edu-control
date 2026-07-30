@@ -9,6 +9,9 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Controlador del DJI Tello / Tello EDU por el protocolo UDP oficial (SDK 2.0).
@@ -59,6 +62,14 @@ public class TelloController {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Telemetry telemetry = new Telemetry();
 
+    // Los envíos UDP salen siempre por este hilo: Android prohíbe red en el
+    // hilo principal (NetworkOnMainThreadException) y los botones llaman desde ahí.
+    private final ExecutorService sender = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "cmd-sender");
+        t.setDaemon(true);
+        return t;
+    });
+
     private DatagramSocket cmdSocket;
     private DatagramSocket stateSocket;
     private InetAddress telloAddr;
@@ -67,6 +78,10 @@ public class TelloController {
     private volatile boolean connected = false;
     private volatile boolean rcSuspended = false;
     private volatile String lastCommandSent = "";
+
+    // Para esperar la respuesta del dron durante el handshake
+    private final Object respLock = new Object();
+    private String lastResponse;
 
     // Joystick (-100..100)
     private volatile int lr = 0, fb = 0, ud = 0, yaw = 0;
@@ -91,10 +106,21 @@ public class TelloController {
             startStateListener();
 
             status("Entrando en modo SDK...");
-            sendRaw("command");
-            sleep(500);
-            sendRaw("command");
-            sleep(500);
+            boolean sdkOk = false;
+            for (int i = 1; i <= 5 && !sdkOk; i++) {
+                String r = sendAndWait("command", 1200);
+                // "ok" del dron, o telemetría llegando por el 8890 (solo emite en modo SDK)
+                sdkOk = (r != null && r.toLowerCase().startsWith("ok")) || telemetry.lastUpdateMs > 0;
+                if (!sdkOk) status("El dron no responde (intento " + i + "/5)...");
+            }
+            if (!sdkOk) {
+                status("❌ El dron no responde. Comprueba que estás en la red TELLO-XXXXXX,\napaga y enciende el dron y vuelve a intentarlo.");
+                running = false;
+                try { cmdSocket.close(); } catch (Exception ignore) { }
+                try { if (stateSocket != null) stateSocket.close(); } catch (Exception ignore) { }
+                main.post(() -> listener.onConnected(false));
+                return;
+            }
 
             status("Activando vídeo...");
             sendRaw("streamon");
@@ -147,6 +173,7 @@ public class TelloController {
                     String resp = new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8).trim();
                     final String cmd = lastCommandSent;
                     Log.d(TAG, "resp[" + cmd + "]: " + resp);
+                    synchronized (respLock) { lastResponse = resp; respLock.notifyAll(); }
                     main.post(() -> listener.onResponse(cmd, resp));
                 } catch (Exception e) {
                     if (running) Log.w(TAG, "resp listener: " + e.getMessage());
@@ -273,14 +300,46 @@ public class TelloController {
     public void disconnect() {
         running = false;
         connected = false;
-        try { if (cmdSocket != null) sendRaw("streamoff"); } catch (Exception ignore) { }
+        try {
+            sender.execute(() -> {
+                if (cmdSocket != null) sendNow("streamoff");
+                try { if (cmdSocket != null) cmdSocket.close(); } catch (Exception ignore) { }
+                try { if (stateSocket != null) stateSocket.close(); } catch (Exception ignore) { }
+            });
+            sender.shutdown();
+            // Espera breve para que el puerto 8890 quede libre antes de reconectar.
+            sender.awaitTermination(300, TimeUnit.MILLISECONDS);
+        } catch (Exception ignore) { }
         try { if (cmdSocket != null) cmdSocket.close(); } catch (Exception ignore) { }
         try { if (stateSocket != null) stateSocket.close(); } catch (Exception ignore) { }
     }
 
     // ---------- Utilidades ----------
 
-    private synchronized void sendRaw(String cmd) {
+    private void sendRaw(String cmd) {
+        try {
+            sender.execute(() -> sendNow(cmd));
+        } catch (Exception e) {
+            Log.w(TAG, "send '" + cmd + "': " + e.getMessage());
+        }
+    }
+
+    /** Envía un comando y espera su respuesta hasta timeoutMs. Devuelve la respuesta o null. */
+    private String sendAndWait(String cmd, long timeoutMs) {
+        synchronized (respLock) { lastResponse = null; }
+        sendRaw(cmd);
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        synchronized (respLock) {
+            while (lastResponse == null) {
+                long left = deadline - System.currentTimeMillis();
+                if (left <= 0) break;
+                try { respLock.wait(left); } catch (InterruptedException e) { break; }
+            }
+            return lastResponse;
+        }
+    }
+
+    private void sendNow(String cmd) {
         try {
             lastCommandSent = cmd.split(" ")[0];
             byte[] data = cmd.getBytes(StandardCharsets.UTF_8);
