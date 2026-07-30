@@ -9,6 +9,9 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Controlador del DJI Tello / Tello EDU por el protocolo UDP oficial (SDK 2.0).
@@ -58,6 +61,14 @@ public class TelloController {
     private final Network network;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Telemetry telemetry = new Telemetry();
+
+    // Los envíos UDP salen siempre por este hilo: Android prohíbe red en el
+    // hilo principal (NetworkOnMainThreadException) y los botones llaman desde ahí.
+    private final ExecutorService sender = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "cmd-sender");
+        t.setDaemon(true);
+        return t;
+    });
 
     private DatagramSocket cmdSocket;
     private DatagramSocket stateSocket;
@@ -273,14 +284,31 @@ public class TelloController {
     public void disconnect() {
         running = false;
         connected = false;
-        try { if (cmdSocket != null) sendRaw("streamoff"); } catch (Exception ignore) { }
+        try {
+            sender.execute(() -> {
+                if (cmdSocket != null) sendNow("streamoff");
+                try { if (cmdSocket != null) cmdSocket.close(); } catch (Exception ignore) { }
+                try { if (stateSocket != null) stateSocket.close(); } catch (Exception ignore) { }
+            });
+            sender.shutdown();
+            // Espera breve para que el puerto 8890 quede libre antes de reconectar.
+            sender.awaitTermination(300, TimeUnit.MILLISECONDS);
+        } catch (Exception ignore) { }
         try { if (cmdSocket != null) cmdSocket.close(); } catch (Exception ignore) { }
         try { if (stateSocket != null) stateSocket.close(); } catch (Exception ignore) { }
     }
 
     // ---------- Utilidades ----------
 
-    private synchronized void sendRaw(String cmd) {
+    private void sendRaw(String cmd) {
+        try {
+            sender.execute(() -> sendNow(cmd));
+        } catch (Exception e) {
+            Log.w(TAG, "send '" + cmd + "': " + e.getMessage());
+        }
+    }
+
+    private void sendNow(String cmd) {
         try {
             lastCommandSent = cmd.split(" ")[0];
             byte[] data = cmd.getBytes(StandardCharsets.UTF_8);
