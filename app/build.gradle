@@ -37,8 +37,10 @@ chaquopy {
     defaultConfig {
         // Python 3.8: es para el que existen los wheels de opencv-contrib en Chaquopy
         version "3.8"
-        // Intérprete local que Chaquopy usa para resolver pip durante la compilación
-        buildPython "C:/Users/franj/AppData/Local/Programs/Python/Python311/python.exe"
+        // Intérprete local que Chaquopy usa para resolver pip durante la compilación.
+        // En Windows usa la ruta fija; en Linux/CI (GitHub Actions) cae a python3.
+        def winPython = "C:/Users/franj/AppData/Local/Programs/Python/Python311/python.exe"
+        buildPython(new File(winPython).exists() ? winPython : "python3")
         pip {
             install "numpy==1.19.5"
             install "opencv-contrib-python==4.5.1.48"
