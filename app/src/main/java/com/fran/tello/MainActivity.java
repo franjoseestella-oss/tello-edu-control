@@ -670,8 +670,17 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override public void onResponse(String command, String response) {
-        if (response.toLowerCase(Locale.US).startsWith("error"))
+        String r = response.toLowerCase(Locale.US);
+        if (r.startsWith("error")) {
             txtStatus.setText(command + " → " + response);
+            if ("takeoff".equals(command)) {
+                Toast.makeText(this, "⚠️ El dron rechazó el despegue: " + response
+                        + "\n(¿batería baja? ¿superficie inclinada?)", Toast.LENGTH_LONG).show();
+            }
+        } else if (r.startsWith("ok")) {
+            if ("takeoff".equals(command)) txtStatus.setText("✅ ¡En el aire!");
+            else if ("land".equals(command)) txtStatus.setText("✅ Aterrizado");
+        }
     }
 
     // ---------- Callbacks de visión ----------

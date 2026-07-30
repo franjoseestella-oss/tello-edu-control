@@ -79,6 +79,10 @@ public class TelloController {
     private volatile boolean rcSuspended = false;
     private volatile String lastCommandSent = "";
 
+    // Para esperar la respuesta del dron durante el handshake
+    private final Object respLock = new Object();
+    private String lastResponse;
+
     // Joystick (-100..100)
     private volatile int lr = 0, fb = 0, ud = 0, yaw = 0;
     private volatile boolean rcDirty = true;
@@ -102,10 +106,21 @@ public class TelloController {
             startStateListener();
 
             status("Entrando en modo SDK...");
-            sendRaw("command");
-            sleep(500);
-            sendRaw("command");
-            sleep(500);
+            boolean sdkOk = false;
+            for (int i = 1; i <= 5 && !sdkOk; i++) {
+                String r = sendAndWait("command", 1200);
+                // "ok" del dron, o telemetría llegando por el 8890 (solo emite en modo SDK)
+                sdkOk = (r != null && r.toLowerCase().startsWith("ok")) || telemetry.lastUpdateMs > 0;
+                if (!sdkOk) status("El dron no responde (intento " + i + "/5)...");
+            }
+            if (!sdkOk) {
+                status("❌ El dron no responde. Comprueba que estás en la red TELLO-XXXXXX,\napaga y enciende el dron y vuelve a intentarlo.");
+                running = false;
+                try { cmdSocket.close(); } catch (Exception ignore) { }
+                try { if (stateSocket != null) stateSocket.close(); } catch (Exception ignore) { }
+                main.post(() -> listener.onConnected(false));
+                return;
+            }
 
             status("Activando vídeo...");
             sendRaw("streamon");
@@ -158,6 +173,7 @@ public class TelloController {
                     String resp = new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8).trim();
                     final String cmd = lastCommandSent;
                     Log.d(TAG, "resp[" + cmd + "]: " + resp);
+                    synchronized (respLock) { lastResponse = resp; respLock.notifyAll(); }
                     main.post(() -> listener.onResponse(cmd, resp));
                 } catch (Exception e) {
                     if (running) Log.w(TAG, "resp listener: " + e.getMessage());
@@ -305,6 +321,21 @@ public class TelloController {
             sender.execute(() -> sendNow(cmd));
         } catch (Exception e) {
             Log.w(TAG, "send '" + cmd + "': " + e.getMessage());
+        }
+    }
+
+    /** Envía un comando y espera su respuesta hasta timeoutMs. Devuelve la respuesta o null. */
+    private String sendAndWait(String cmd, long timeoutMs) {
+        synchronized (respLock) { lastResponse = null; }
+        sendRaw(cmd);
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        synchronized (respLock) {
+            while (lastResponse == null) {
+                long left = deadline - System.currentTimeMillis();
+                if (left <= 0) break;
+                try { respLock.wait(left); } catch (InterruptedException e) { break; }
+            }
+            return lastResponse;
         }
     }
 
