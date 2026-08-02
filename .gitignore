@@ -9,3 +9,10 @@ local.properties
 captures/
 
 .vercel
+
+# Estación de PC: lo que genera cada vuelo, no es código
+pc/logs/
+pc/media/
+pc/data/
+__pycache__/
+*.pyc

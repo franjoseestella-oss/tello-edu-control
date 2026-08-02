@@ -73,7 +73,12 @@ public class VisionProcessor implements VideoDecoder.FrameListener {
         }
     }
 
+    private String lastVisionRc = "";
+
     public void setMode(int m) {
+        String[] n = {"OFF", "DETECTAR", "SEGUIR", "COLOR"};
+        DebugLog.d("UI", "modo de visión -> " + (m >= 0 && m < n.length ? n[m] : m)
+                + (m == MODE_FOLLOW || m == MODE_COLOR ? " (¡la visión toma el mando del joystick!)" : ""));
         mode = m;
         if (m != MODE_FOLLOW) stopMotion();
     }
@@ -172,6 +177,11 @@ public class VisionProcessor implements VideoDecoder.FrameListener {
 
         if ((mode == MODE_FOLLOW || mode == MODE_COLOR)
                 && controller != null && controller.isConnected()) {
+            String axes = lr + "," + fb + "," + ud + "," + yaw;
+            if (!axes.equals(lastVisionRc)) {
+                DebugLog.d("RC", "la visión manda rc " + lr + " " + fb + " " + ud + " " + yaw);
+                lastVisionRc = axes;
+            }
             controller.setRc(lr, fb, ud, yaw);
         }
         if (gestureEnabled && controller != null && controller.isConnected()) {

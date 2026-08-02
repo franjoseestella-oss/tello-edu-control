@@ -1,6 +1,7 @@
 package com.fran.tello;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -91,6 +92,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        DebugLog.init(this);
         setContentView(R.layout.activity_main);
         prefs = getSharedPreferences("tello", MODE_PRIVATE);
 
@@ -139,18 +141,19 @@ public class MainActivity extends AppCompatActivity
             @Override public void onStopTrackingTouch(SeekBar sb) { prefs.edit().putInt("speed", speed).apply(); }
         });
 
-        findViewById(R.id.btnConnectBig).setOnClickListener(v -> { haptic(v); connectDrone(); });
-        findViewById(R.id.btnTakeoff).setOnClickListener(v -> { haptic(v); if (ensureConnected()) controller.takeoff(); });
-        findViewById(R.id.btnLand).setOnClickListener(v -> { haptic(v); if (ensureConnected()) controller.land(); });
-        findViewById(R.id.btnEmergency).setOnClickListener(v -> { haptic(v); if (ensureConnected()) confirmEmergency(); });
-        findViewById(R.id.btnFlipL).setOnClickListener(v -> { haptic(v); if (ensureConnected()) controller.flip('l'); });
-        findViewById(R.id.btnFlipR).setOnClickListener(v -> { haptic(v); if (ensureConnected()) controller.flip('r'); });
-        findViewById(R.id.btnFlipF).setOnClickListener(v -> { haptic(v); if (ensureConnected()) controller.flip('f'); });
-        findViewById(R.id.btnFlipB).setOnClickListener(v -> { haptic(v); if (ensureConnected()) controller.flip('b'); });
+        findViewById(R.id.btnConnectBig).setOnClickListener(v -> { tap("CONECTAR"); haptic(v); connectDrone(); });
+        findViewById(R.id.btnTakeoff).setOnClickListener(v -> { tap("DESPEGAR"); haptic(v); if (ensureConnected()) controller.takeoff(); });
+        findViewById(R.id.btnLand).setOnClickListener(v -> { tap("ATERRIZAR"); haptic(v); if (ensureConnected()) controller.land(); });
+        findViewById(R.id.btnEmergency).setOnClickListener(v -> { tap("EMERGENCIA"); haptic(v); if (ensureConnected()) confirmEmergency(); });
+        findViewById(R.id.btnFlipL).setOnClickListener(v -> { tap("flip L"); haptic(v); if (ensureConnected()) controller.flip('l'); });
+        findViewById(R.id.btnFlipR).setOnClickListener(v -> { tap("flip R"); haptic(v); if (ensureConnected()) controller.flip('r'); });
+        findViewById(R.id.btnFlipF).setOnClickListener(v -> { tap("flip F"); haptic(v); if (ensureConnected()) controller.flip('f'); });
+        findViewById(R.id.btnFlipB).setOnClickListener(v -> { tap("flip B"); haptic(v); if (ensureConnected()) controller.flip('b'); });
         findViewById(R.id.btnPhoto).setOnClickListener(v -> { haptic(v); takePhoto(); });
         btnRecord.setOnClickListener(v -> { haptic(v); toggleRecording(); });
         btnVoice.setOnClickListener(v -> { haptic(v); toggleVoice(); });
         btnLog.setOnClickListener(v -> { haptic(v); toggleLog(); });
+        findViewById(R.id.btnDebug).setOnClickListener(v -> { haptic(v); showDebug(); });
         findViewById(R.id.btnSettings).setOnClickListener(v -> { haptic(v); showSettings(); });
         findViewById(R.id.btnMission).setOnClickListener(v -> { haptic(v); showMission(); });
 
@@ -171,9 +174,17 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void pushRc() {
-        if (controller == null || !controller.isConnected()) return;
+        if (controller == null || !controller.isConnected()) {
+            if (jLr != 0 || jFb != 0 || jUd != 0 || jYaw != 0)
+                DebugLog.d("WARN", "joystick movido sin conexión: no se envía nada");
+            return;
+        }
         int m = vision != null ? vision.getMode() : 0;
-        if (m == VisionProcessor.MODE_FOLLOW || m == VisionProcessor.MODE_COLOR) return; // la visión manda
+        if (m == VisionProcessor.MODE_FOLLOW || m == VisionProcessor.MODE_COLOR) {
+            DebugLog.d("WARN", "joystick IGNORADO: el modo de visión "
+                    + (m == VisionProcessor.MODE_FOLLOW ? "SEGUIR" : "COLOR") + " controla el dron");
+            return; // la visión manda
+        }
         float k = speed / 100f;
         controller.setRc(Math.round(jLr * 100 * k), Math.round(jFb * 100 * k),
                          Math.round(jUd * 100 * k), Math.round(jYaw * 100 * k));
@@ -229,6 +240,7 @@ public class MainActivity extends AppCompatActivity
 
     private void handleAction(String action) {
         if (action == null) return;
+        DebugLog.d("UI", "acción '" + action + "' (mando/voz/gesto)");
         switch (action) {
             case "takeoff": if (ensureConnected()) controller.takeoff(); return;
             case "land":    if (ensureConnected()) controller.land(); return;
@@ -272,6 +284,83 @@ public class MainActivity extends AppCompatActivity
             Toast.makeText(this, logger.isLogging() ? "📈 Registrando vuelo..." : "No se pudo iniciar el registro",
                     Toast.LENGTH_SHORT).show();
         }
+    }
+
+    // ---------- Depuración ----------
+
+    private void tap(String what) { DebugLog.d("UI", "botón " + what); }
+
+    /** Ventana 🐞: log en vivo, diagnóstico del enlace y compartir el fichero. */
+    private void showDebug() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(10);
+        root.setPadding(pad, pad, pad, pad);
+
+        final TextView tv = new TextView(this);
+        tv.setTextSize(9);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        tv.setTextIsSelectable(true);
+        tv.setText(DebugLog.tail(200));
+
+        final ScrollView sv = new ScrollView(this);
+        sv.addView(tv);
+        LinearLayout.LayoutParams svp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(220));
+        sv.setLayoutParams(svp);
+        root.addView(sv);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        String[] labels = {"🔄 Actualizar", "🩺 Diagnóstico", "📤 Compartir"};
+        for (int i = 0; i < labels.length; i++) {
+            Button b = new Button(this);
+            b.setText(labels[i]);
+            b.setTextSize(11);
+            b.setLayoutParams(new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            final int idx = i;
+            b.setOnClickListener(v -> {
+                if (idx == 0) {
+                    tv.setText(DebugLog.tail(200));
+                    sv.post(() -> sv.fullScroll(View.FOCUS_DOWN));
+                } else if (idx == 1) {
+                    if (controller == null) {
+                        Toast.makeText(this, "Pulsa CONECTAR primero", Toast.LENGTH_SHORT).show();
+                    } else {
+                        controller.diagnose();
+                        Toast.makeText(this, "Diagnóstico en marcha (~20 s). Pulsa Actualizar.",
+                                Toast.LENGTH_LONG).show();
+                    }
+                } else {
+                    startActivity(Intent.createChooser(DebugLog.shareIntent(this), "Enviar el log"));
+                }
+            });
+            row.addView(b);
+        }
+        root.addView(row);
+
+        final CheckBox cbRc = new CheckBox(this);
+        cbRc.setText("Registrar todos los paquetes rc (20/s, log enorme)");
+        cbRc.setTextSize(11);
+        cbRc.setChecked(TelloController.verboseRc);
+        cbRc.setOnCheckedChangeListener((b, on) -> {
+            TelloController.verboseRc = on;
+            DebugLog.d("UI", "rc detallado = " + on);
+        });
+        root.addView(cbRc);
+
+        final TextView info = new TextView(this);
+        info.setTextSize(10);
+        info.setText("Fichero: " + DebugLog.getPath());
+        root.addView(info);
+
+        new AlertDialog.Builder(this)
+                .setTitle("🐞 Depuración del enlace")
+                .setView(root)
+                .setPositiveButton("Cerrar", null)
+                .show();
+        sv.post(() -> sv.fullScroll(View.FOCUS_DOWN));
     }
 
     // ---------- Ajustes ----------
@@ -401,10 +490,13 @@ public class MainActivity extends AppCompatActivity
         final List<int[]> steps = new ArrayList<>(mission);
         final String[] dirs = {"up", "down", "left", "right", "forward", "back"};
         Toast.makeText(this, "▶ Ejecutando misión (" + steps.size() + " pasos). Despega primero.", Toast.LENGTH_LONG).show();
+        DebugLog.d("UI", "▶ misión de " + steps.size() + " pasos");
         new Thread(() -> {
             controller.setRcSuspended(true);
             try {
+                int i = 1;
                 for (int[] s : steps) {
+                    DebugLog.d("STEP", "misión paso " + (i++) + "/" + steps.size());
                     if (s[0] == 6) {
                         controller.rotateCmd(s[1]);
                         sleep(Math.abs(s[1]) * 22L + 1500);
@@ -573,7 +665,9 @@ public class MainActivity extends AppCompatActivity
 
     private void connectDrone() {
         Network wifi = getWifiNetwork();
+        DebugLog.d("NET", "redes del móvil: " + describeNetworks());
         if (wifi == null) {
+            DebugLog.d("ERR", "no hay ninguna red WiFi disponible: imposible hablar con el dron");
             setConnStatus("⚠️ No detecto WiFi del Tello.\nConéctate a la red TELLO-XXXXXX y reintenta.");
             return;
         }
@@ -605,8 +699,43 @@ public class MainActivity extends AppCompatActivity
         return null;
     }
 
+    /** Para el log: qué redes ve el móvil y cuál es la del dron. */
+    private String describeNetworks() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        if (cm == null) return "sin ConnectivityManager";
+        StringBuilder sb = new StringBuilder();
+        for (Network n : cm.getAllNetworks()) {
+            NetworkCapabilities c = cm.getNetworkCapabilities(n);
+            if (c == null) continue;
+            String tipo = c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ? "WIFI"
+                    : c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ? "DATOS" : "otra";
+            String ips = "";
+            try {
+                android.net.LinkProperties lp = cm.getLinkProperties(n);
+                if (lp != null) {
+                    StringBuilder a = new StringBuilder();
+                    for (android.net.LinkAddress la : lp.getLinkAddresses()) {
+                        if (la.getAddress() instanceof java.net.Inet4Address)
+                            a.append(la.getAddress().getHostAddress()).append(" ");
+                    }
+                    ips = a.toString().trim();
+                }
+            } catch (Exception ignore) { }
+            sb.append(tipo).append("(").append(ips.isEmpty() ? "?" : ips)
+              .append(c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ? ",internet" : "")
+              .append(") ");
+        }
+        String s = sb.toString().trim();
+        if (!s.contains("192.168.10."))
+            DebugLog.d("WARN", "ninguna interfaz tiene IP 192.168.10.x: el móvil NO está en el WiFi del Tello");
+        return s.isEmpty() ? "ninguna" : s;
+    }
+
     private boolean ensureConnected() {
         if (controller == null || !controller.isConnected()) {
+            DebugLog.d("WARN", "orden descartada en la app: "
+                    + (controller == null ? "no hay controlador (nunca se pulsó CONECTAR)"
+                                          : "el controlador no está conectado"));
             Toast.makeText(this, "Pulsa CONECTAR primero", Toast.LENGTH_SHORT).show();
             return false;
         }
@@ -661,6 +790,7 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override public void onConnected(boolean ok) {
+        DebugLog.d("STEP", "onConnected(" + ok + ")");
         if (ok) {
             connectOverlay.setVisibility(View.GONE);
         } else {
@@ -698,8 +828,11 @@ public class MainActivity extends AppCompatActivity
             @Override public void run() {
                 if (controller != null && controller.isConnected()) {
                     long last = controller.getTelemetry().lastUpdateMs;
-                    if (last > 0 && System.currentTimeMillis() - last > 4000)
+                    if (last > 0 && System.currentTimeMillis() - last > 4000) {
                         txtStatus.setText("⚠️ Señal débil con el dron...");
+                        DebugLog.d("WARN", "señal débil: " + (System.currentTimeMillis() - last)
+                                + " ms sin telemetría");
+                    }
                 }
                 ui.postDelayed(this, 2000);
             }

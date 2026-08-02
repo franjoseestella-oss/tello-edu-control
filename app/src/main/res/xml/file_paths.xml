@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rutas que la app puede compartir (logs de depuración y grabaciones). -->
+<paths>
+    <external-files-path name="logs" path="logs/" />
+    <external-files-path name="files" path="." />
+</paths>
