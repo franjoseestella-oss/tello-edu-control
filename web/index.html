@@ -31,6 +31,9 @@
   }
   .cta:hover{transform:translateY(-2px);box-shadow:0 14px 38px rgba(30,136,229,.55)}
   .cta small{font-weight:500;opacity:.8;font-size:13px}
+  .ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .cta2{background:linear-gradient(135deg,#00a86b,#046b45);box-shadow:0 10px 30px rgba(0,168,107,.35)}
+  .cta2:hover{box-shadow:0 14px 38px rgba(0,168,107,.5)}
   .subcta{margin-top:14px;color:var(--muted);font-size:14px}
   .subcta a{color:var(--accent2);text-decoration:none}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:48px}
@@ -54,16 +57,36 @@
     <div class="logo">🚁</div>
     <h1>Tello Control</h1>
     <p class="tag">La estación de control definitiva para tu <b>DJI Tello EDU</b>:
-       vídeo en directo, joysticks, mando, voz, misiones y visión por OpenCV.</p>
+       vídeo en directo, joysticks, mando, voz, misiones y visión por OpenCV.<br/>
+       <b>En el móvil</b> con la app Android, o <b>en el PC</b> desde el navegador.</p>
 
-    <a class="cta" id="download" href="https://github.com/franjoseestella-oss/tello-edu-control/releases/download/apk-latest/TelloControl.apk">
-      ⬇️ Descargar APK
-      <small>Android 7.0+ · ~100 MB</small>
-    </a>
-    <p class="subcta">Compilada automáticamente desde el código en
+    <div class="ctas">
+      <a class="cta" id="download" href="https://github.com/franjoseestella-oss/tello-edu-control/releases/download/apk-latest/TelloControl.apk">
+        📱 Descargar APK
+        <small>Android 7.0+ · ~100 MB</small>
+      </a>
+      <a class="cta cta2" href="https://github.com/franjoseestella-oss/tello-edu-control/archive/refs/heads/main.zip">
+        💻 Descargar estación de PC
+        <small>Windows/Mac/Linux · Python</small>
+      </a>
+    </div>
+    <p class="subcta">Compiladas automáticamente desde el código en
       <a href="https://github.com/franjoseestella-oss/tello-edu-control" target="_blank" rel="noopener">GitHub</a>
       · también en <a href="https://github.com/franjoseestella-oss/tello-edu-control/releases" target="_blank" rel="noopener">Releases</a></p>
   </header>
+
+  <section>
+    <div class="warn" style="background:rgba(30,136,229,.08);border-color:rgba(30,136,229,.35)">
+      <h2 style="color:var(--accent)">Dos formas de pilotarlo, las mismas funciones</h2>
+      <p><b>📱 En el móvil</b> — instala el APK: lleva OpenCV dentro, no necesita PC ni internet.<br/>
+      <b>💻 En el PC</b> — la estación web: el ordenador se conecta al dron y abres
+      <code>http://127.0.0.1:8770</code> en el navegador. Desde el móvil también, escaneando
+      el QR que sale en el botón 📱 (móvil y PC en la misma WiFi del dron).</p>
+      <p style="margin-top:10px;color:var(--muted);font-size:14px">Esta página <em>no</em> puede
+      pilotar el dron: un navegador en internet no puede enviar UDP a <code>192.168.10.1</code>.
+      Por eso la estación se descarga y corre en tu equipo.</p>
+    </div>
+  </section>
 
   <div class="grid">
     <div class="card"><h3>🕹️ Joysticks analógicos</h3><p>Dos sticks en pantalla como un mando real: giro y altura a la izquierda, movimiento a la derecha. Con retorno al centro.</p></div>
@@ -99,7 +122,32 @@
       <li>Descarga el APK en el móvil y ábrelo.</li>
       <li>Permite <em>"instalar apps de orígenes desconocidos"</em> si te lo pide.</li>
       <li>Por cable: <code>adb install -r TelloControl.apk</code></li>
+      <li>Si el dron no obedece, pulsa <b>🐞</b> en la app: registra todo el
+          protocolo y deja compartir el log.</li>
     </ul>
+  </section>
+
+  <section>
+    <h2>💻 Estación de PC (y en el móvil por WiFi)</h2>
+    <ol>
+      <li>Descarga el ZIP y descomprímelo.</li>
+      <li>Una sola vez: <code>pip install opencv-contrib-python numpy</code></li>
+      <li>Conecta el <b>PC</b> a la WiFi del dron <code>TELLO-XXXXXX</code>.</li>
+      <li>Doble clic en <code>pc\TELLO_STATION.bat</code> (o <code>python pc/station.py</code>).</li>
+      <li>Se abre <code>http://127.0.0.1:8770</code> → pulsa <b>CONECTAR</b>.</li>
+      <li>Para el móvil: botón <b>📱</b>, escanea el QR con la cámara. El PC hace
+          el trabajo; el móvil es la pantalla y los mandos.</li>
+    </ol>
+    <p style="color:var(--muted);margin-top:10px">¿Sin dron a mano? El botón
+      <b>💻 Webcam</b> hace funcionar toda la visión con la cámara del ordenador.
+      Y con <code>pc\TELLO_DEBUG.bat</code> tienes la consola de diagnóstico del
+      enlace, que no necesita instalar nada.</p>
+    <div class="grid" style="margin-top:24px">
+      <div class="card"><h3>🎥 Vídeo con overlay</h3><p>El H.264 del dron decodificado en el PC, con las detecciones dibujadas encima y servido al navegador.</p></div>
+      <div class="card"><h3>⚡ Detector LBP</h3><p>Caras a más de 100 fps sobre vídeo de 30 fps, así que el seguimiento nunca va por detrás.</p></div>
+      <div class="card"><h3>😀 Selfie por sonrisa</h3><p>Dispara la foto sola en cuanto detecta que sonríes.</p></div>
+      <div class="card"><h3>🐞 Caja negra del enlace</h3><p>Cada paquete UDP con su latencia, los errores del dron traducidos y un diagnóstico sin volar.</p></div>
+    </div>
   </section>
 
   <section>

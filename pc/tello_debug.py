@@ -49,6 +49,12 @@ class Log:
     """Log en fichero + buffer en memoria para la web."""
 
     def __init__(self):
+        # La consola de Windows es cp1252 y revienta con los emojis del log.
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
         os.makedirs(LOG_DIR, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.path = os.path.join(LOG_DIR, "tello_debug_%s.log" % stamp)
@@ -71,7 +77,11 @@ class Log:
             self.file.write(text + "\n")
         except Exception:
             pass
-        print(text, flush=True)
+        try:
+            print(text, flush=True)
+        except Exception:
+            # consola sin unicode: mejor perder un acento que tirar el programa
+            print(text.encode("ascii", "replace").decode("ascii"), flush=True)
 
     def since(self, idx):
         with self.lock:

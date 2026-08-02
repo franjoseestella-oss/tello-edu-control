@@ -27,6 +27,8 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import cv2
+
 # El enlace UDP y el log son exactamente los mismos que usa tello_debug.py
 from tello_debug import LOG, TELLO
 import vision as vz
@@ -34,6 +36,9 @@ from vision import VisionEngine
 from video import VideoStream, MEDIA_DIR
 
 WEB_PORT = int(os.environ.get("TELLO_WEB_PORT", "8770"))
+# Escucha en todas las interfaces para poder abrirla desde el movil.
+# Con TELLO_BIND=127.0.0.1 se limita a este PC.
+BIND = os.environ.get("TELLO_BIND", "0.0.0.0")
 
 VISION = VisionEngine(log=LOG.add)
 VIDEO = VideoStream(vision=VISION, log=LOG.add)
@@ -170,6 +175,22 @@ def send_command(cmd, wait=7.0):
     threading.Thread(target=worker, name="cmd", daemon=True).start()
 
 
+def qr_png(text, size=320):
+    """QR con la URL de la estación, para abrirla en el móvil con la cámara."""
+    try:
+        enc = cv2.QRCodeEncoder_create()
+        img = enc.encode(text)
+        if img.max() <= 1:
+            img = img * 255
+        img = cv2.resize(img, (size, size), interpolation=cv2.INTER_NEAREST)
+        img = cv2.copyMakeBorder(img, 16, 16, 16, 16, cv2.BORDER_CONSTANT, value=255)
+        ok, buf = cv2.imencode(".png", img)
+        return buf.tobytes() if ok else None
+    except Exception as e:
+        LOG.add("WARN", "no pude generar el QR: %s" % e)
+        return None
+
+
 def connect_all():
     """Conecta el enlace, arranca el vídeo y deja el rc en marcha."""
     ok = TELLO.connect_sequence()
@@ -253,11 +274,36 @@ label{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:5px}
 #toast.show{opacity:1}
 .mlist{background:#05080d;border:1px solid var(--line);border-radius:10px;padding:8px;
   max-height:170px;overflow:auto;font-size:12px}
-@media(max-width:760px){.stick{width:120px;height:120px}.knob{width:48px;height:48px;left:36px;top:36px}
-  #hud{max-width:52vw}.big{padding:10px 12px;font-size:13px}}
+/* ---- móvil ---- */
+@media(max-width:900px){
+  body{font-size:13px}
+  .stick{width:118px;height:118px;bottom:10px}
+  .knob{width:46px;height:46px;left:36px;top:36px}
+  #stickL{left:8px}#stickR{right:8px}
+  #hud{max-width:98vw;gap:5px;padding:5px}
+  #hud .chip{font-size:11px;padding:3px 6px}
+  #modes{top:auto;bottom:64px;gap:4px;max-width:99vw}
+  #modes button{font-size:11px;padding:6px 8px}
+  #fly{bottom:10px;left:auto;right:150px;transform:none;flex-wrap:wrap;
+       justify-content:center;max-width:calc(100vw - 300px)}
+  .big{padding:9px 10px;font-size:12px}
+  #icons{top:auto;bottom:10px;right:auto;left:150px;flex-wrap:wrap;max-width:120px}
+  .icon{font-size:15px;padding:6px 8px}
+}
+@media(max-width:900px) and (orientation:portrait){
+  #rotate{display:flex !important}
+}
+#rotate{display:none;position:fixed;inset:0;z-index:60;background:#05080d;color:var(--fg);
+  align-items:center;justify-content:center;text-align:center;padding:30px;font-size:18px;flex-direction:column;gap:12px}
 </style></head><body>
 
 <div id="stage"><img id="cam" src="/video" alt="video"></div>
+
+<div id="rotate">
+  <div style="font-size:48px">📱↻</div>
+  <div>Gira el móvil en horizontal para pilotar</div>
+  <button onclick="goFull()">⛶ Pantalla completa</button>
+</div>
 
 <div class="panel" id="hud">
   <span class="chip"><i class="dot" id="dot"></i><span id="conn">sin conectar</span></span>
@@ -273,6 +319,8 @@ label{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:5px}
 <div class="panel" id="icons">
   <button class="icon" id="b-photo" title="Foto">📷</button>
   <button class="icon" id="b-rec" title="Grabar">⏺</button>
+  <button class="icon" id="b-full" title="Pantalla completa" onclick="goFull()">⛶</button>
+  <button class="icon" id="b-phone" title="Abrir en el móvil">📱</button>
   <button class="icon" id="b-voice" title="Voz">🎤</button>
   <button class="icon" id="b-mission" title="Misión">🗺</button>
   <button class="icon" id="b-log" title="Log y diagnóstico">🐞</button>
@@ -312,6 +360,18 @@ label{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:5px}
   <div id="log"></div>
 </div>
 
+<div class="drawer" id="dPhone">
+  <div class="row"><h3 style="flex:1">📱 Abrir en el móvil</h3><button onclick="closeAll()">✕</button></div>
+  <p style="color:var(--muted);font-size:13px">
+    Conecta el móvil <b>a la misma WiFi que este PC</b> (la del dron, TELLO-XXXXXX)
+    y escanea el código con la cámara. El PC sigue haciendo el trabajo: vídeo,
+    visión y el enlace con el dron. Si el móvil no la abre, revisa el firewall de
+    Windows para <code>python.exe</code> en redes privadas.
+  </p>
+  <img id="qr" src="/qr.png" alt="QR" style="width:min(320px,70vw);align-self:center;border-radius:12px;background:#fff;padding:6px">
+  <div class="mlist" id="urls">buscando direcciones...</div>
+</div>
+
 <div class="drawer" id="dMission">
   <div class="row"><h3 style="flex:1">🗺 Misión por waypoints</h3><button onclick="closeAll()">✕</button></div>
   <div class="mlist" id="mlist">Sin pasos.</div>
@@ -345,6 +405,13 @@ label{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:5px}
 const $ = s => document.querySelector(s);
 let state = {};
 
+function goFull(){
+  const el = document.documentElement;
+  if(document.fullscreenElement){ document.exitFullscreen(); return; }
+  (el.requestFullscreen || el.webkitRequestFullscreen || (()=>{})).call(el);
+  if(screen.orientation && screen.orientation.lock)
+    screen.orientation.lock('landscape').catch(()=>{});
+}
 function toast(t){ const e=$('#toast'); e.textContent=t; e.classList.add('show');
   clearTimeout(e._t); e._t=setTimeout(()=>e.classList.remove('show'),2200); }
 function post(u, body){ return fetch(u,{method:'POST',body:JSON.stringify(body||{})}); }
@@ -359,6 +426,7 @@ $('#b-land').onclick    = () => cmd('land');
 $('#b-emg').onclick     = () => { if(confirm('¡PARADA DE EMERGENCIA! Se paran los motores y el dron cae.')) cmd('emergency'); };
 $('#b-photo').onclick   = () => post('/api/photo').then(()=>toast('📷 Foto guardada'));
 $('#b-rec').onclick     = () => post('/api/record');
+$('#b-phone').onclick   = () => { toggle('#dPhone'); $('#qr').src = '/qr.png?' + Date.now(); };
 $('#b-mission').onclick = () => toggle('#dMission');
 $('#b-log').onclick     = () => toggle('#dLog');
 $('#m-detect').onclick  = () => post('/api/mode',{mode: state.mode==1?0:1});
@@ -524,6 +592,9 @@ async function poll(){
     $('#b-rec').classList.toggle('on', d.recording);
     $('#b-rec').textContent = d.recording ? '⏹' : '⏺';
     $('#names').textContent = d.names.length ? 'Caras memorizadas: ' + d.names.join(', ') : 'Ninguna cara memorizada.';
+    $('#urls').textContent = (d.urls && d.urls.length)
+        ? 'Direcciones de esta estación:\n' + d.urls.join('\n')
+        : 'No encuentro ninguna dirección de red. ¿Está el PC en alguna WiFi?';
     $('#mlist').textContent = d.mission.length
         ? d.mission.map((m,i)=>(i+1)+'. '+m[0]+' '+m[1]).join('\n') : 'Sin pasos.';
     if(d.lines.length){
@@ -592,6 +663,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, jpg, "image/jpeg")
             else:
                 self._send(404, b"", "image/jpeg")
+        elif path == "/qr.png":
+            urls = lan_urls(self.server.server_address[1])
+            png = qr_png(urls[0] if urls else "http://127.0.0.1:%d" % WEB_PORT)
+            if png:
+                self._send(200, png, "image/png")
+            else:
+                self._send(404, b"", "image/png")
         elif path == "/api/poll":
             self._poll()
         elif path == "/api/log":
@@ -648,6 +726,7 @@ class Handler(BaseHTTPRequestHandler):
             "source": VIDEO.source, "recording": VIDEO.is_recording(),
             "mission": ST.mission, "mission_running": ST.mission_running,
             "speed": ST.speed, "path": os.path.basename(LOG.path),
+            "urls": lan_urls(self.server.server_address[1]),
         }))
 
     # ---- POST ----
@@ -730,10 +809,33 @@ class WebServer(ThreadingHTTPServer):
     daemon_threads = True
 
 
+def lan_urls(port):
+    """URLs por las que se puede abrir la estación desde el móvil."""
+    import socket
+    urls, ips = [], set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
+    except Exception:
+        pass
+    try:                       # la IP por la que se sale hacia el dron
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("192.168.10.1", 8889))
+        ips.add(s.getsockname()[0])
+        s.close()
+    except Exception:
+        pass
+    # primero la del WiFi del dron: es la que ve el móvil conectado al Tello
+    for ip in sorted(ips, key=lambda i: (not i.startswith("192.168.10."), i)):
+        if not ip.startswith("127."):
+            urls.append("http://%s:%d" % (ip, port))
+    return urls
+
+
 def open_web_server():
     for port in range(WEB_PORT, WEB_PORT + 12):
         try:
-            srv = WebServer(("127.0.0.1", port), Handler)
+            srv = WebServer((BIND, port), Handler)
             if port != WEB_PORT:
                 LOG.add("WARN", "el puerto %d estaba ocupado; uso el %d" % (WEB_PORT, port))
             return srv, port
@@ -755,6 +857,11 @@ def main():
     srv, port = open_web_server()
     url = "http://127.0.0.1:%d" % port
     LOG.add("INFO", "estación en %s   (Ctrl+C para salir)" % url)
+    for u in lan_urls(port):
+        LOG.add("INFO", "📱 desde el móvil (misma WiFi): %s" % u)
+    if BIND != "127.0.0.1":
+        LOG.add("INFO", "cualquiera en esta WiFi puede abrirla; "
+                        "para limitarla a este PC: TELLO_BIND=127.0.0.1")
     if "--no-browser" not in sys.argv:
         try:
             webbrowser.open(url)
