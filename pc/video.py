@@ -16,8 +16,10 @@ import threading
 import time
 
 # Menos buffer = menos retardo. Debe fijarse antes de crear el VideoCapture.
+# 'timeout' (microsegundos) evita que una lectura se quede colgada esperando
+# paquetes que no llegan: sin esto, cambiar de fuente tardaba hasta 30 s.
 os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS",
-                      "fflags;nobuffer|flags;low_delay|reorder_queue_size;0")
+                      "fflags;nobuffer|flags;low_delay|reorder_queue_size;0|timeout;3000000")
 
 import cv2                                    # noqa: E402
 import numpy as np                            # noqa: E402
@@ -73,7 +75,8 @@ class VideoStream:
         if kind != self.source:
             self.source = kind
             self._reopen = True
-            self.log("VIDEO", "fuente de vídeo -> %s" % kind)
+            self.log("VIDEO", "fuente de vídeo -> %s (unos segundos hasta que "
+                              "el flujo anterior se suelta)" % kind)
         return self.source
 
     # ------------------------------------------------------------------

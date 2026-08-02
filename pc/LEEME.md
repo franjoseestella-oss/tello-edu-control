@@ -4,7 +4,7 @@ Dos programas, ambos en el navegador y sin instalar servidores:
 
 | Programa | Para qué | Dependencias |
 |----------|----------|--------------|
-| **`TELLO_STATION.bat`** → `station.py` | Estación completa: vídeo, visión artificial, joysticks, misiones, foto/vídeo, log | opencv-contrib-python, numpy |
+| **`TELLO_STATION.bat`** → `station.py` | Estación completa: vídeo, visión artificial, joysticks, misiones, foto/vídeo, log | opencv-contrib-python, numpy, mediapipe |
 | `TELLO_DEBUG.bat` → `tello_debug.py` | Solo depuración del enlace UDP (por si falla lo demás) | ninguna |
 
 Los dos usan el puerto **8770**, así que solo uno a la vez.
@@ -21,7 +21,26 @@ Lo que hay, igual que en la APK:
 - **👁 Caras** — detección múltiple + nombre de las caras memorizadas (LBPH).
 - **🎯 Seguir** — el dron te sigue con control PID suave (`rc`, no saltos).
 - **🟢 Color** — sigue un objeto por color (verde, azul, rojo, amarillo, naranja).
-- **✋ Gestos** — mano abierta = despegar, puño = aterrizar, 2 dedos = subir, 3 = bajar.
+- **🦴 Esqueleto** — te sigue el **cuerpo entero** (33 puntos, MediaPipe). Aguanta
+  aunque te des la vuelta o bajes la cara, y mide la distancia por el ancho de
+  hombros, que es mucho más estable que el tamaño de la cara.
+- **🖐 Dedos** — esqueleto de la mano (21 puntos) y órdenes por postura:
+
+  | Gesto | Orden |
+  |-------|-------|
+  | 🖐 palma abierta | despegar |
+  | ✊ puño | aterrizar |
+  | ☝ un dedo | subir |
+  | ✌ dos dedos | bajar |
+  | 🤟 tres dedos | foto |
+  | 👈 / 👉 pulgar a un lado | izquierda / derecha |
+
+  Y con los brazos (modo esqueleto): 🙌 los dos arriba = despegar · 🧍 pegados al
+  cuerpo = aterrizar · 🙋 uno en cruz = a ese lado · 🅃 los dos en cruz = quieto.
+
+  Ningún gesto dispara con un fotograma suelto: hay que mantenerlo 4 seguidos.
+- **✋ Gestos (clásico)** — el método por color de piel, sin MediaPipe: mano abierta =
+  despegar, puño = aterrizar, 2 dedos = subir, 3 = bajar.
 - **🔳 QR** — lee códigos QR y los muestra en pantalla.
 - **😀 Selfie** — dispara la foto solo cuando detecta una sonrisa.
 - **➕ Memorizar cara** — le pones nombre a una cara y la reconoce a partir de entonces.
@@ -74,10 +93,16 @@ traducidos, timeouts, IPs y pérdida de paquetes. El log se guarda siempre en
 ```
 station.py      estacion completa (servidor + interfaz web)
 vision.py       motor de vision (mismo cerebro que la APK)
+skeleton.py     esqueleto del cuerpo y de las manos (MediaPipe Tasks)
 video.py        captura de video del dron o de la webcam
 tello_debug.py  enlace UDP + log + consola minima
 cascades/       detector de caras LBP rapido
+models/         modelos .task de esqueleto y manos (se bajan solos)
 data/           caras memorizadas (faces.yml, names.txt)
 media/          fotos y grabaciones
 logs/           registros
 ```
+
+Los modelos de esqueleto (13 MB) se descargan solos la primera vez que pulsas
+🦴 o 🖐, así que **hazlo con internet antes de irte a volar**. Una vez bajados
+quedan en `pc/models/` y ya no hacen falta más.

@@ -17,8 +17,10 @@ import time
 import cv2
 import numpy as np
 
-MODE_OFF, MODE_DETECT, MODE_FOLLOW, MODE_COLOR = 0, 1, 2, 3
-MODE_NAMES = {0: "OFF", 1: "CARAS", 2: "SEGUIR", 3: "COLOR"}
+from skeleton import SkeletonEngine
+
+MODE_OFF, MODE_DETECT, MODE_FOLLOW, MODE_COLOR, MODE_SKELETON = 0, 1, 2, 3, 4
+MODE_NAMES = {0: "OFF", 1: "CARAS", 2: "SEGUIR", 3: "COLOR", 4: "ESQUELETO"}
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
@@ -36,6 +38,10 @@ _ID_THRESHOLD = 78.0
 # Encuadre: el objetivo se centra un poco por encima del centro, para que el
 # dron coja también el cuerpo del sujeto (idea de juanmapf97/Tello-Face-Recognition).
 FRAME_OFFSET_Y = 0.08
+
+# Ancho de hombros que el dron intenta mantener, en fracción del ancho de la
+# imagen. ~0.16 deja a la persona entera en cuadro a unos 2-2,5 m.
+BODY_TARGET_W = 0.16
 
 # Área del rostro (px²) que se considera "distancia buena". Fuera de la banda,
 # el dron se acerca o se aleja. También sacado del proyecto de referencia.
@@ -79,6 +85,10 @@ class VisionEngine:
         self.on_photo = None       # callback que hace la foto
         self._last_selfie = 0.0
 
+        # Esqueleto (MediaPipe): seguimiento del cuerpo y gestos con los dedos
+        self.skeleton = SkeletonEngine(log=self.log)
+        self.pending_action = ""   # orden que la estación debe ejecutar
+
         self._pid = {"yaw": [0.0, 0.0], "ud": [0.0, 0.0], "fb": [0.0, 0.0]}
         self._lock = threading.Lock()
         self._pending_enroll = None
@@ -115,9 +125,23 @@ class VisionEngine:
     def set_mode(self, m):
         self.mode = int(m)
         self._pid_reset()
-        if self.mode not in (MODE_FOLLOW, MODE_COLOR):
+        if not self.controls_drone():
             self.rc = (0, 0, 0, 0)
+        # el esqueleto solo se carga si hace falta (tarda ~1 s en arrancar)
+        self.skeleton.pose_on = (self.mode == MODE_SKELETON)
+        if self.skeleton.pose_on and not self.skeleton.ready:
+            self.skeleton.start()
         self.log("VISION", "modo -> %s" % MODE_NAMES.get(self.mode, self.mode))
+
+    def set_hands(self, on):
+        """Gestos con los dedos por esqueleto de la mano (MediaPipe)."""
+        on = bool(on)
+        if on and not self.skeleton.ready and not self.skeleton.start():
+            self.log("WARN", "no se pudo activar el gesto por dedos: %s" % self.skeleton.error)
+            return False
+        self.skeleton.hands_on = on
+        self.log("VISION", "gestos con los dedos %s" % ("ON" if on else "OFF"))
+        return True
 
     def set_color(self, name):
         if name in COLORS:
@@ -138,10 +162,15 @@ class VisionEngine:
 
     def active(self):
         return (self.mode != MODE_OFF or self.gesture_enabled
-                or self.qr_enabled or self.selfie)
+                or self.qr_enabled or self.selfie or self.skeleton.active())
 
     def controls_drone(self):
-        return self.mode in (MODE_FOLLOW, MODE_COLOR)
+        return self.mode in (MODE_FOLLOW, MODE_COLOR, MODE_SKELETON)
+
+    def take_action(self):
+        """Devuelve (y consume) la orden pendiente de un gesto."""
+        a, self.pending_action = self.pending_action, ""
+        return a
 
     def known_names(self):
         return sorted(self._name_to_id.keys())
@@ -160,6 +189,22 @@ class VisionEngine:
             if self._pending_enroll:
                 name, self._pending_enroll = self._pending_enroll, None
                 self.status = self._enroll(name, frame)
+
+            # Esqueleto del cuerpo y de la mano (MediaPipe)
+            if self.skeleton.active():
+                action = self.skeleton.process(frame)
+                if action:
+                    self.pending_action = action
+                if self.mode == MODE_SKELETON:
+                    box = self.skeleton.target_box()
+                    if box is not None:
+                        bx, by, bw, bh = box
+                        faces.append((bx, by, bw, bh, "cuerpo", True))
+                        self._update_offsets(bx, by, bw, bh, w, h)
+                        ctrl = self._follow_body(bx, by, bw, bh, w, h)
+                    else:
+                        self._pid_reset()
+                        self.offsets = (0, 0, 0)
 
             if self.mode in (MODE_DETECT, MODE_FOLLOW) or self.selfie:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -268,6 +313,9 @@ class VisionEngine:
             cv2.putText(frame, "AUTO %s  rc %d %d %d %d" % (MODE_NAMES[self.mode], lr, fb, ud, yaw),
                         (12, h - 14), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2, cv2.LINE_AA)
 
+        if self.skeleton.active():
+            self.skeleton.draw(frame)
+
         if gesture:
             cv2.putText(frame, "GESTO: " + gesture.upper(), (12, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 230, 255), 2, cv2.LINE_AA)
@@ -314,6 +362,28 @@ class VisionEngine:
         yaw = self._pid_step("yaw", ex, 70, 2, 8)
         ud = self._pid_step("ud", -ey, 60, 2, 6)
         fb = self._pid_step("fb", ez, 45, 1, 4)
+        return (0, _clamp(fb), _clamp(ud), _clamp(yaw))
+
+    def _follow_body(self, bx, by, bw, bh, w, h):
+        """Seguimiento del cuerpo entero: la distancia se mide por los hombros,
+        que es mucho más estable que la altura de la caja (brazos, agacharse...)."""
+        cx = bx + bw / 2.0
+        cy = by + bh / 2.0
+        ex = (cx - w / 2.0) / (w / 2.0)
+        ey = (cy - h / 2.0 - h * FRAME_OFFSET_Y) / (h / 2.0)
+
+        sw = self.skeleton.shoulder_width()
+        target = w * BODY_TARGET_W
+        ez = (target - sw) / target if sw > 5 else 0.0
+
+        ex = 0.0 if abs(ex) < 0.07 else ex
+        ey = 0.0 if abs(ey) < 0.10 else ey
+        ez = 0.0 if abs(ez) < 0.20 else ez
+
+        # ganancias algo más suaves: el cuerpo ocupa más y el error crece rápido
+        yaw = self._pid_step("yaw", ex, 60, 2, 7)
+        ud = self._pid_step("ud", -ey, 45, 1, 5)
+        fb = self._pid_step("fb", ez, 35, 1, 3)
         return (0, _clamp(fb), _clamp(ud), _clamp(yaw))
 
     # ------------------------------------------------------------------

@@ -77,6 +77,7 @@ class Station:
                     TELLO.rc = [lr, fb, ud, yaw]
                 if VISION.gesture_enabled:
                     self._apply_gesture(VISION.gesture)
+                self._apply_skeleton_action(VISION.take_action())
                 self._check_safety()
             except Exception as e:
                 LOG.add("ERROR", "bucle de control: %s" % e)
@@ -99,6 +100,33 @@ class Station:
                 TELLO.rc[2] = -40
             else:
                 TELLO.rc[2] = 0
+
+    def _apply_skeleton_action(self, action):
+        """Ordenes que llegan de los gestos con dedos o brazos (MediaPipe)."""
+        if not action:
+            return
+        now = time.time()
+        if action in ("takeoff", "land"):
+            if now - self.last_gesture_ms < self.gesture_cooldown:
+                return
+            self.last_gesture_ms = now
+            send_command(action)
+        elif action == "photo":
+            if now - self.last_gesture_ms < 2.0:
+                return
+            self.last_gesture_ms = now
+            VIDEO.take_photo()
+        elif action == "stop":
+            TELLO.rc = [0, 0, 0, 0]
+        elif not VISION.controls_drone():
+            # pulsos de 1,2 s, como los de la APK
+            axis = {"up": (2, 1), "down": (2, -1), "left": (0, -1),
+                    "right": (0, 1)}.get(action)
+            if not axis:
+                return
+            i, sign = axis
+            TELLO.rc[i] = sign * ST.speed
+            threading.Timer(1.2, lambda: TELLO.rc.__setitem__(i, 0)).start()
 
     def _check_safety(self):
         bat = TELLO.telemetry.get("bat")
@@ -330,6 +358,8 @@ label{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:5px}
   <button id="m-detect">👁 Caras</button>
   <button id="m-follow">🎯 Seguir</button>
   <button id="m-color">🟢 Color</button>
+  <button id="m-skel">🦴 Esqueleto</button>
+  <button id="m-hands">🖐 Dedos</button>
   <button id="m-gesture">✋ Gestos</button>
   <button id="m-qr">🔳 QR</button>
   <button id="m-selfie">😀 Selfie</button>
@@ -432,6 +462,10 @@ $('#b-log').onclick     = () => toggle('#dLog');
 $('#m-detect').onclick  = () => post('/api/mode',{mode: state.mode==1?0:1});
 $('#m-follow').onclick  = () => post('/api/mode',{mode: state.mode==2?0:2});
 $('#m-color').onclick   = () => post('/api/mode',{mode: state.mode==3?0:3});
+$('#m-skel').onclick    = () => { post('/api/mode',{mode: state.mode==4?0:4});
+                                  if(state.mode!=4) toast('🦴 Cargando esqueleto... te seguirá el cuerpo entero'); };
+$('#m-hands').onclick   = () => { post('/api/mode',{hands: !state.hands});
+                                  if(!state.hands) toast('🖐 Palma=despegar ✊=aterrizar ☝=subir ✌=bajar 🤟=foto 👈👉=lados'); };
 $('#m-gesture').onclick = () => post('/api/mode',{gesture: !state.gesture});
 $('#m-qr').onclick      = () => post('/api/mode',{qr: !state.qr});
 $('#m-selfie').onclick  = () => post('/api/mode',{selfie: !state.selfie});
@@ -584,6 +618,9 @@ async function poll(){
     $('#m-detect').classList.toggle('on', d.mode===1);
     $('#m-follow').classList.toggle('on', d.mode===2);
     $('#m-color').classList.toggle('on', d.mode===3);
+    $('#m-skel').classList.toggle('on', d.mode===4);
+    $('#m-hands').classList.toggle('on', d.hands);
+    $('#m-hands').textContent = d.hands && d.fingers>=0 ? '🖐 Dedos: '+d.fingers : '🖐 Dedos';
     $('#m-gesture').classList.toggle('on', d.gesture);
     $('#m-qr').classList.toggle('on', d.qr);
     $('#m-selfie').classList.toggle('on', d.selfie);
@@ -720,6 +757,9 @@ class Handler(BaseHTTPRequestHandler):
             "rc_enabled": TELLO.rc_enabled,
             "mode": VISION.mode, "gesture": VISION.gesture_enabled,
             "qr": VISION.qr_enabled, "selfie": VISION.selfie,
+            "hands": VISION.skeleton.hands_on, "skel_ready": VISION.skeleton.ready,
+            "fingers": VISION.skeleton.fingers,
+            "skel_gesture": VISION.skeleton.gesture_text,
             "color": VISION.color, "names": VISION.known_names(),
             "vision_fps": round(VISION.fps, 1), "detector": VISION.detector,
             "video": VIDEO.connected, "vfps": round(VIDEO.fps, 1),
@@ -763,6 +803,8 @@ class Handler(BaseHTTPRequestHandler):
                     TELLO.rc = [0, 0, 0, 0]
             if "gesture" in b:
                 VISION.set_gesture(b["gesture"])
+            if "hands" in b:
+                VISION.set_hands(b["hands"])
             if "qr" in b:
                 VISION.set_qr(b["qr"])
             if "selfie" in b:

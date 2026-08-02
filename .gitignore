@@ -16,3 +16,6 @@ pc/media/
 pc/data/
 __pycache__/
 *.pyc
+
+# Modelos de MediaPipe: se descargan solos (13 MB)
+pc/models/
