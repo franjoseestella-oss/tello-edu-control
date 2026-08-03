@@ -25,6 +25,11 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    // Los .task de MediaPipe se leen mapeados en memoria: no deben comprimirse
+    androidResources {
+        noCompress += ["task", "tflite"]
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -52,4 +57,45 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'com.google.android.material:material:1.12.0'
+    // Esqueleto (33 puntos) y manos (21 puntos) en el móvil, sin internet
+    implementation 'com.google.mediapipe:tasks-vision:0.10.14'
 }
+
+// ---------------------------------------------------------------------------
+// Modelos de MediaPipe (.task). No se guardan en git (13 MB): se bajan una vez
+// aquí y quedan dentro de la APK, así el móvil no necesita internet al volar.
+// ---------------------------------------------------------------------------
+def mediapipeModels = [
+        "pose_landmarker_lite.task":
+                "https://storage.googleapis.com/mediapipe-models/pose_landmarker/" +
+                "pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+        "hand_landmarker.task":
+                "https://storage.googleapis.com/mediapipe-models/hand_landmarker/" +
+                "hand_landmarker/float16/latest/hand_landmarker.task",
+]
+
+tasks.register("downloadMediapipeModels") {
+    description "Descarga los modelos .task de MediaPipe a src/main/assets"
+    doLast {
+        def dir = file("src/main/assets")
+        dir.mkdirs()
+        mediapipeModels.each { name, url ->
+            def dst = new File(dir, name)
+            if (dst.exists() && dst.length() > 100_000) return
+            try {
+                logger.lifecycle("Descargando ${name}...")
+                def tmp = new File(dir, name + ".part")
+                new URL(url).withInputStream { input ->
+                    tmp.withOutputStream { out -> out << input }
+                }
+                tmp.renameTo(dst)
+                logger.lifecycle("  -> ${name} (${dst.length() / 1024} KB)")
+            } catch (Exception e) {
+                logger.warn("AVISO: no se pudo descargar ${name} (${e.message}). " +
+                        "La APK se compilará sin esqueleto ni gestos de mano.")
+            }
+        }
+    }
+}
+
+tasks.named("preBuild") { dependsOn "downloadMediapipeModels" }

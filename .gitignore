@@ -19,3 +19,4 @@ __pycache__/
 
 # Modelos de MediaPipe: se descargan solos (13 MB)
 pc/models/
+app/src/main/assets/*.task

@@ -20,8 +20,35 @@ import os
 import numpy as np
 import cv2
 
-_face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+_load_error = ""
+
+
+def _load_cascade():
+    """El XML de Haar viene dentro del wheel de OpenCV, pero según la versión
+    está en cv2.data o al lado del módulo. Se prueban las dos rutas."""
+    global _load_error
+    candidates = []
+    try:
+        candidates.append(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    except Exception as e:
+        _load_error = "cv2.data: %s" % e
+    candidates.append(os.path.join(os.path.dirname(cv2.__file__), "data",
+                                   "haarcascade_frontalface_default.xml"))
+    for path in candidates:
+        try:
+            if not os.path.exists(path):
+                continue
+            c = cv2.CascadeClassifier(path)
+            if not c.empty():
+                return c
+        except Exception as e:
+            _load_error = "%s: %s" % (path, e)
+    if not _load_error:
+        _load_error = "no encuentro haarcascade_frontalface_default.xml"
+    return None
+
+
+_face_cascade = _load_cascade()
 
 try:
     _recognizer = cv2.face.LBPHFaceRecognizer_create()
@@ -30,7 +57,20 @@ except Exception:
     _recognizer = None
     _has_face_module = False
 
-_qr = cv2.QRCodeDetector()
+try:
+    _qr = cv2.QRCodeDetector()
+except Exception:
+    _qr = None
+
+
+def diag():
+    """Resumen del estado, para poder verlo desde la APK cuando algo falla."""
+    return "opencv=%s caras=%s lbph=%s qr=%s%s" % (
+        cv2.__version__,
+        "ok" if _face_cascade is not None else "NO",
+        "ok" if _has_face_module else "NO",
+        "ok" if _qr is not None else "NO",
+        (" (" + _load_error + ")") if _load_error else "")
 
 # Rangos HSV para seguimiento por color (H: 0-179 en OpenCV)
 _COLORS = {
@@ -78,8 +118,9 @@ def process(data, w, h, mode, gesture):
     parts = []
     ctrl = (0, 0, 0, 0)
 
-    if mode >= 1:
+    if mode in (1, 2) and _face_cascade is not None:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = cv2.equalizeHist(gray)      # aguanta mucho mejor el contraluz
         faces = _face_cascade.detectMultiScale(gray, 1.2, 5, minSize=(30, 30))
         if len(faces) > 0:
             fx, fy, fw, fh = _largest(faces)

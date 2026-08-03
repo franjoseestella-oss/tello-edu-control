@@ -67,7 +67,7 @@ public class MainActivity extends AppCompatActivity
 
     private TextView txtStatus, txtSpeed, txtConnStatus;
     private TextView hudBattery, hudAlt, hudSpeed, hudTime, hudTemp, hudPad;
-    private Button btnDetect, btnFollow, btnColor, btnGesture, btnRecord, btnVoice, btnLog;
+    private Button btnDetect, btnFollow, btnColor, btnGesture, btnBody, btnRecord, btnVoice, btnLog;
     private View connectOverlay;
     private JoystickView joyLeft, joyRight;
     private SeekBar seekSpeed;
@@ -115,6 +115,7 @@ public class MainActivity extends AppCompatActivity
         btnFollow = findViewById(R.id.btnFollow);
         btnColor = findViewById(R.id.btnColor);
         btnGesture = findViewById(R.id.btnGesture);
+        btnBody = findViewById(R.id.btnBody);
         btnRecord = findViewById(R.id.btnRecord);
         btnVoice = findViewById(R.id.btnVoice);
         btnLog = findViewById(R.id.btnLog);
@@ -162,13 +163,11 @@ public class MainActivity extends AppCompatActivity
         gamepad = new GamepadController(this);
         voice = new VoiceController(this, this);
 
-        setConnStatus("Cargando OpenCV...");
-        new Thread(() -> {
-            vision = new VisionProcessor(this, this);
-            runOnUiThread(() -> setConnStatus(vision.isReady()
-                    ? "1. Conéctate al WiFi del dron (TELLO-XXXXXX)\n2. Pulsa Conectar"
-                    : "1. Conéctate al WiFi del dron (TELLO-XXXXXX)\n2. Pulsa Conectar"));
-        }, "python-init").start();
+        // El objeto se crea al momento; OpenCV y MediaPipe se cargan solos en
+        // segundo plano (antes se creaba en un hilo y, si conectabas rápido, el
+        // vídeo se quedaba sin analizador y no salía ninguna detección).
+        vision = new VisionProcessor(this, this);
+        setConnStatus("1. Conéctate al WiFi del dron (TELLO-XXXXXX)\n2. Pulsa Conectar");
 
         startWatchdog();
     }
@@ -525,13 +524,19 @@ public class MainActivity extends AppCompatActivity
             refreshModeButtons();
         });
         btnFollow.setOnClickListener(v -> {
-            if (!visionReady()) return;
+            if (vision == null) return;
+            // Con el esqueleto activo se puede seguir aunque OpenCV no arrancara
+            boolean byBody = vision.isBody() && vision.isSkeletonReady();
+            if (!byBody && !visionReady()) return;
             haptic(v);
             int m = vision.getMode() == VisionProcessor.MODE_FOLLOW
                     ? VisionProcessor.MODE_OFF : VisionProcessor.MODE_FOLLOW;
             vision.setMode(m);
-            if (m == VisionProcessor.MODE_FOLLOW)
-                Toast.makeText(this, "El dron seguirá tu cara. ¡Ojo!", Toast.LENGTH_SHORT).show();
+            if (m == VisionProcessor.MODE_FOLLOW) {
+                Toast.makeText(this, byBody
+                        ? "El dron seguirá tu cuerpo entero. ¡Ojo!"
+                        : "El dron seguirá tu cara. ¡Ojo!", Toast.LENGTH_SHORT).show();
+            }
             refreshModeButtons();
         });
         btnColor.setOnClickListener(v -> {
@@ -559,7 +564,29 @@ public class MainActivity extends AppCompatActivity
         btnGesture.setOnClickListener(v -> {
             if (!visionReady()) return;
             haptic(v);
-            vision.setGesture(!vision.isGesture());
+            boolean on = !vision.isGesture();
+            vision.setGesture(on);
+            if (on) {
+                Toast.makeText(this, vision.isSkeletonReady()
+                        ? "Gestos con la mano: 🖐 despegar · ✊ aterrizar · ☝ subir · ✌ bajar · 🤟 foto"
+                        : "Gestos básicos (sin MediaPipe en esta APK)", Toast.LENGTH_LONG).show();
+            }
+            refreshModeButtons();
+        });
+        btnBody.setOnClickListener(v -> {
+            haptic(v);
+            if (vision == null) return;
+            if (!vision.isSkeletonReady()) {
+                Toast.makeText(this, "Esqueleto no disponible: " + vision.getSkeletonError(),
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+            boolean on = !vision.isBody();
+            vision.setBody(on);
+            if (on) {
+                Toast.makeText(this, "Esqueleto activo. Con 🎯 Seguir, el dron persigue "
+                        + "a la persona entera (aunque te des la vuelta)", Toast.LENGTH_LONG).show();
+            }
             refreshModeButtons();
         });
         findViewById(R.id.btnEnroll).setOnClickListener(v -> {
@@ -574,8 +601,12 @@ public class MainActivity extends AppCompatActivity
     }
 
     private boolean visionReady() {
-        if (vision == null || !vision.isReady()) {
-            Toast.makeText(this, "OpenCV aún no está listo", Toast.LENGTH_SHORT).show();
+        if (vision == null) return false;
+        if (!vision.isPythonReady()) {
+            Toast.makeText(this, vision.isReady()
+                            ? "OpenCV no arrancó: " + vision.getPythonError()
+                            : "La visión aún se está cargando, espera un par de segundos",
+                    Toast.LENGTH_LONG).show();
             return false;
         }
         return true;
@@ -587,7 +618,10 @@ public class MainActivity extends AppCompatActivity
         btnFollow.setSelected(m == VisionProcessor.MODE_FOLLOW);
         btnColor.setSelected(m == VisionProcessor.MODE_COLOR);
         btnGesture.setSelected(vision.isGesture());
-        if (m == VisionProcessor.MODE_OFF && !vision.isGesture()) overlay.clear();
+        btnBody.setSelected(vision.isBody());
+        if (m == VisionProcessor.MODE_OFF && !vision.isGesture() && !vision.isBody()) {
+            overlay.clear();
+        }
     }
 
     private void promptEnroll() {
@@ -816,11 +850,13 @@ public class MainActivity extends AppCompatActivity
 
     // ---------- Callbacks de visión ----------
 
-    @Override public void onDetections(List<OverlayView.Face> faces, String gesture,
-                                       OverlayView.Qr qr, int sw, int sh) {
-        overlay.update(faces, gesture, qr, sw, sh);
+    @Override public void onDetections(OverlayView.Result result) {
+        overlay.update(result);
     }
     @Override public void onVisionStatus(String msg) { txtStatus.setText(msg); }
+    @Override public void onVisionAction(String action) {
+        if ("photo".equals(action)) takePhoto();
+    }
 
     // ---------- Vigilancia de señal ----------
 

@@ -40,6 +40,9 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
 
+      - name: Comprobar que los modelos de MediaPipe entraron en la APK
+        run: ls -lh app/src/main/assets/pose_landmarker_lite.task app/src/main/assets/hand_landmarker.task
+
       - name: Renombrar APK
         run: cp app/build/outputs/apk/debug/app-debug.apk TelloControl.apk
 

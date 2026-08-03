@@ -118,6 +118,7 @@
         <Button android:id="@+id/btnFollow" style="@style/ModeButton" android:text="🎯 Seguir" />
         <Button android:id="@+id/btnColor" style="@style/ModeButton" android:text="🟢 Color" />
         <Button android:id="@+id/btnGesture" style="@style/ModeButton" android:text="✋ Gestos" />
+        <Button android:id="@+id/btnBody" style="@style/ModeButton" android:text="🦴 Cuerpo" />
         <Button android:id="@+id/btnEnroll" style="@style/ModeButton" android:text="➕ Cara" />
         <Button android:id="@+id/btnMission" style="@style/ModeButton" android:text="🗺 Misión" />
     </LinearLayout>

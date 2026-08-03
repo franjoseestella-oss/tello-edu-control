@@ -54,8 +54,11 @@ public class VideoDecoder {
     private static final long VISION_INTERVAL_MS = 100;   // ~10 fps de análisis
 
     public interface FrameListener {
-        /** Fotograma reducido en BGR (w*h*3) para procesar con OpenCV. */
-        void onFrame(byte[] bgr, int w, int h);
+        /**
+         * Fotograma reducido en ARGB (w*h). ¡El array se reutiliza! Sólo es
+         * válido mientras dura la llamada: si hace falta después, hay que copiarlo.
+         */
+        void onFrame(int[] argb, int w, int h);
         /** true si ahora mismo se van a usar los fotogramas (si no, no se gasta CPU). */
         boolean wantsFrames();
     }
@@ -85,7 +88,8 @@ public class VideoDecoder {
     private long frameIndex = 0;
     private long lastVisionMs = 0;
 
-    private int[] argb;   // sólo se reserva si se graba
+    private int[] argb;         // resolución completa, sólo si se graba
+    private int[] visionArgb;   // reducido, reutilizado para la visión
 
     public VideoDecoder(SurfaceView surfaceView, Network network) {
         this.surfaceView = surfaceView;
@@ -328,7 +332,10 @@ public class VideoDecoder {
                     codec = createPixelCodec();
                     if (codec == null) {
                         failures++;
-                        if (failures >= 3) Log.w(TAG, "sin decodificador extra: visión/grabación sin imagen");
+                        if (failures >= 3) {
+                            DebugLog.d("ERR", "este móvil no deja abrir un segundo "
+                                    + "decodificador H.264: la visión se queda sin imagen");
+                        }
                         try { Thread.sleep(500); } catch (InterruptedException e) { break; }
                         continue;
                     }
@@ -365,6 +372,7 @@ public class VideoDecoder {
             MediaCodec c = MediaCodec.createDecoderByType(MIME);
             c.configure(format, null, null, 0);   // sin Surface: modo ByteBuffer
             c.start();
+            DebugLog.d("VISION", "decodificador de píxeles listo: la visión ya recibe imagen");
             return c;
         } catch (Throwable t) {
             Log.w(TAG, "no se pudo crear el decodificador de píxeles: " + t.getMessage());
@@ -403,8 +411,9 @@ public class VideoDecoder {
                     }
                     if (visionDue) {
                         lastVisionMs = now;
-                        byte[] bgr = yuvToBgrScaled(image, VISION_W, VISION_H);
-                        try { l.onFrame(bgr, VISION_W, VISION_H); } catch (Exception ignore) { }
+                        if (visionArgb == null) visionArgb = new int[VISION_W * VISION_H];
+                        yuvToArgbScaled(image, visionArgb, VISION_W, VISION_H);
+                        try { l.onFrame(visionArgb, VISION_W, VISION_H); } catch (Exception ignore) { }
                     }
                 }
             } catch (Exception e) {
@@ -482,10 +491,10 @@ public class VideoDecoder {
     }
 
     /**
-     * YUV_420_888 -> BGR ya reducido al tamaño de visión. Convierte sólo los
+     * YUV_420_888 -> ARGB ya reducido al tamaño de visión. Convierte sólo los
      * píxeles que se van a usar (480x360 en vez de 960x720 + escalado aparte).
      */
-    private static byte[] yuvToBgrScaled(Image image, int dw, int dh) {
+    private static void yuvToArgbScaled(Image image, int[] out, int dw, int dh) {
         Image.Plane[] planes = image.getPlanes();
         ByteBuffer yBuf = planes[0].getBuffer();
         ByteBuffer uBuf = planes[1].getBuffer();
@@ -497,7 +506,6 @@ public class VideoDecoder {
         int uLim = uBuf.limit(), vLim = vBuf.limit();
         int sw = image.getWidth(), sh = image.getHeight();
 
-        byte[] out = new byte[dw * dh * 3];
         int i = 0;
         for (int y = 0; y < dh; y++) {
             int sy = y * sh / dh;
@@ -510,14 +518,9 @@ public class VideoDecoder {
                 int U = 128, V = 128;
                 if (uOff + uvIndex < uLim) U = uBuf.get(uOff + uvIndex) & 0xff;
                 if (vOff + uvIndex < vLim) V = vBuf.get(vOff + uvIndex) & 0xff;
-
-                int p = yuvToArgbPixel(Y, U, V);
-                out[i++] = (byte) (p & 0xff);          // B
-                out[i++] = (byte) ((p >> 8) & 0xff);   // G
-                out[i++] = (byte) ((p >> 16) & 0xff);  // R
+                out[i++] = yuvToArgbPixel(Y, U, V);
             }
         }
-        return out;
     }
 
     /** BT.601 en enteros. */

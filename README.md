@@ -15,15 +15,26 @@ empotrado vía Chaquopy) para seguimiento facial, gestos e identificación.
 - Vídeo H.264 a pantalla completa (decodificado con `MediaCodec`)
 - Indicador de batería
 
-**Visión (OpenCV, en el propio móvil)**
-- 👁 **VISIÓN**: activa el análisis del vídeo (detecta y dibuja las caras)
-- 🎯 **SEGUIR**: el dron mantiene tu cara centrada (gira, sube/baja, se acerca/aleja)
-- ✋ **GESTOS**: gestos de la mano → comandos
-  - Palma abierta (≈5 dedos) → **despegar**
-  - Puño (0 dedos) → **aterrizar**
-  - 2 dedos → subir · 3 dedos → bajar
+**Visión (en el propio móvil, sin internet)**
+- 👁 **CARAS**: detecta y dibuja las caras (OpenCV / Haar)
+- 🎯 **SEGUIR**: el dron mantiene el objetivo centrado (gira, sube/baja, se acerca/aleja)
+- 🟢 **COLOR**: sigue un objeto por su color (mantén pulsado para cambiarlo)
+- 🦴 **CUERPO**: esqueleto de 33 puntos con **MediaPipe**. Se dibuja encima del
+  vídeo y, combinado con 🎯 SEGUIR, el dron persigue a la persona entera — sigue
+  funcionando aunque te des la vuelta, al revés que la cara. La distancia se mide
+  por el ancho de hombros, más estable que el alto de la caja.
+- ✋ **GESTOS**: con MediaPipe se detecta la mano (21 puntos) y se cuentan los
+  dedos de verdad. Un gesto tiene que mantenerse 4 fotogramas para que cuente:
+  - 🖐 palma → **despegar** · ✊ puño → **aterrizar**
+  - ☝ 1 dedo → subir · ✌ 2 dedos → bajar · 🤟 3 dedos → **foto**
+  - 👈 / 👉 pulgar a un lado → izquierda / derecha
+  - Con los brazos: 🙌 arriba → despegar · 🧍 abajo → aterrizar · brazo en cruz → lateral
 - ➕ **CARA**: memoriza una cara con un nombre (identificación LBPH). Cuando esa
   persona aparece, se muestra su nombre sobre el recuadro.
+
+Los modelos `.task` de MediaPipe (13 MB) no están en git: los descarga Gradle
+antes de compilar y quedan dentro de la APK, así que el móvil no necesita
+internet al volar.
 
 ## Cómo se usa
 
@@ -32,11 +43,11 @@ empotrado vía Chaquopy) para seguimiento facial, gestos e identificación.
 2. Abre la app **Tello Control**.
 3. Pulsa **CONECTAR**. Debería aparecer el vídeo y la batería.
 4. Pilota con las flechas, **DESPEGAR** / **ATERRIZAR**.
-5. Para visión: pulsa **VISIÓN**, y luego **SEGUIR** o **GESTOS**.
+5. Para visión: pulsa **CARAS**, **CUERPO** o **GESTOS**; con 🎯 **SEGUIR** el
+   dron persigue lo que haya activo (el cuerpo si 🦴 está encendido, si no la cara).
 
 > ⚠️ En **SEGUIR** y **GESTOS** el dron se mueve solo. Hazlo en un espacio amplio
-> y ten siempre a mano **ATERRIZAR**. Los gestos requieren buena luz y fondo
-> despejado (usan segmentación de piel + contornos, sin IA de manos).
+> y ten siempre a mano **ATERRIZAR**.
 
 ## Detalles técnicos
 
