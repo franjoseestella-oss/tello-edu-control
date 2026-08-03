@@ -610,14 +610,15 @@ public class MainActivity extends AppCompatActivity
 
     private void takePhoto() {
         if (videoDecoder == null) { Toast.makeText(this, "Sin vídeo", Toast.LENGTH_SHORT).show(); return; }
-        Bitmap bmp = videoDecoder.getSnapshot();
-        if (bmp == null) { Toast.makeText(this, "Sin vídeo todavía", Toast.LENGTH_SHORT).show(); return; }
-        new Thread(() -> {
-            String dst = MediaSaver.saveImage(this, bmp, "tello_" + timestamp());
-            runOnUiThread(() -> Toast.makeText(this,
-                    dst != null ? "📷 Foto guardada en " + dst : "Error al guardar la foto",
-                    Toast.LENGTH_SHORT).show());
-        }, "photo-save").start();
+        videoDecoder.requestSnapshot(bmp -> {
+            if (bmp == null) { Toast.makeText(this, "Sin vídeo todavía", Toast.LENGTH_SHORT).show(); return; }
+            new Thread(() -> {
+                String dst = MediaSaver.saveImage(this, bmp, "tello_" + timestamp());
+                runOnUiThread(() -> Toast.makeText(this,
+                        dst != null ? "📷 Foto guardada en " + dst : "Error al guardar la foto",
+                        Toast.LENGTH_SHORT).show());
+            }, "photo-save").start();
+        });
     }
 
     private void toggleRecording() {

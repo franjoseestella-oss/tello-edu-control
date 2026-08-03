@@ -10,6 +10,8 @@ import com.chaquo.python.android.AndroidPlatform;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -42,6 +44,12 @@ public class VisionProcessor implements VideoDecoder.FrameListener {
     private boolean pythonReady = false;
 
     private final AtomicBoolean busy = new AtomicBoolean(false);
+    /** Un único hilo reutilizado (antes se creaba uno por fotograma). */
+    private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "vision-worker");
+        t.setDaemon(true);
+        return t;
+    });
 
     private volatile int mode = MODE_OFF;
     private volatile boolean gestureEnabled = false;
@@ -111,13 +119,17 @@ public class VisionProcessor implements VideoDecoder.FrameListener {
 
     private boolean visionActive() { return mode != MODE_OFF || gestureEnabled; }
 
+    /** El decodificador pregunta esto antes de gastar CPU convirtiendo píxeles. */
+    @Override
+    public boolean wantsFrames() { return pythonReady && visionActive(); }
+
     @Override
     public void onFrame(byte[] bgr, int w, int h) {
         if (!pythonReady || !visionActive()) return;
         if (!busy.compareAndSet(false, true)) return;
 
         final byte[] data = bgr;
-        new Thread(() -> {
+        worker.execute(() -> {
             try {
                 String enrollName = pendingEnroll;
                 if (enrollName != null) {
@@ -138,7 +150,7 @@ public class VisionProcessor implements VideoDecoder.FrameListener {
             } finally {
                 busy.set(false);
             }
-        }, "vision-worker").start();
+        });
     }
 
     private void handleResult(String result, int w, int h) {
